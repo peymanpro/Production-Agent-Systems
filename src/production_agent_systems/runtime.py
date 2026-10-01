@@ -4,11 +4,20 @@ from dataclasses import dataclass
 from time import sleep
 from typing import Callable
 
+from .audit import AuditRecord, AuditSink
 from .events import Event, EventSink, EventType
-from .models import ActionKind, AgentState, Observation, PolicyDecision, RunStatus, Task, ToolResult
+from .models import (
+    ActionKind,
+    AgentState,
+    Observation,
+    PolicyDecision,
+    RunStatus,
+    Task,
+    ToolResult,
+)
 from .planner import Planner
 from .policy import PermissionPolicy
-from .reliability import RetryPolicy
+from .reliability import CircuitBreaker, RetryPolicy
 from .state import CheckpointStore, StateStore
 from .tools import ToolExecutor, ToolRegistry
 
@@ -44,6 +53,8 @@ class AgentRuntime:
         state_store: StateStore,
         checkpoint_store: CheckpointStore,
         event_sink: EventSink,
+        audit_sink: AuditSink | None = None,
+        circuit_breaker: CircuitBreaker | None = None,
         config: RuntimeConfig | None = None,
         sleep_fn: Callable[[float], None] = sleep,
     ) -> None:
@@ -53,6 +64,8 @@ class AgentRuntime:
         self.state_store = state_store
         self.checkpoint_store = checkpoint_store
         self.event_sink = event_sink
+        self.audit_sink = audit_sink
+        self.circuit_breaker = circuit_breaker or CircuitBreaker()
         self.tool_executor = ToolExecutor(registry)
         self.config = config or RuntimeConfig()
         self.sleep_fn = sleep_fn
@@ -62,6 +75,25 @@ class AgentRuntime:
         self.event_sink.append(
             Event.create(len(existing) + 1, state.task.task_id, event_type, data)
         )
+
+    def _audit(
+        self,
+        state: AgentState,
+        action: str,
+        resource: str,
+        outcome: str,
+        details: dict | None = None,
+    ) -> None:
+        if self.audit_sink is not None:
+            self.audit_sink.append(
+                AuditRecord.create(
+                    state.task.task_id,
+                    action,
+                    resource,
+                    outcome,
+                    details,
+                )
+            )
 
     def _transition(self, state: AgentState, new_status: RunStatus, reason: str) -> None:
         old = state.status
@@ -152,6 +184,13 @@ class AgentRuntime:
             )
 
             if decision is PolicyDecision.DENY:
+                self._audit(
+                    state,
+                    "tool_policy",
+                    tool.name,
+                    "denied",
+                    {"decision": decision.value},
+                )
                 state.failure_reason = f"policy denied tool: {tool.name}"
                 self._transition(state, RunStatus.FAILED, state.failure_reason)
                 self._emit(
@@ -163,6 +202,13 @@ class AgentRuntime:
                 return state
 
             if decision is PolicyDecision.CONFIRMATION_REQUIRED:
+                self._audit(
+                    state,
+                    "tool_policy",
+                    tool.name,
+                    "confirmation_required",
+                    {"decision": decision.value},
+                )
                 state.failure_reason = f"confirmation required for tool: {tool.name}"
                 self._transition(state, RunStatus.WAITING, state.failure_reason)
                 self._emit(
@@ -183,13 +229,22 @@ class AgentRuntime:
                     duplicate_suppressed=True,
                 )
             else:
+                self._audit(
+                    state,
+                    "tool_execution",
+                    tool.name,
+                    "requested",
+                    {"effect": tool.effect.value},
+                )
                 self._emit(
                     state,
                     EventType.TOOL_REQUEST,
                     {"tool_name": tool.name, "arguments": action.arguments},
                 )
                 result = self._execute_with_retry(
-                    state, action.tool_name, action.arguments
+                    state,
+                    action.tool_name,
+                    action.arguments,
                 )
                 if result.success and action.idempotency_key:
                     state.executed_idempotency_keys.add(action.idempotency_key)
@@ -215,6 +270,16 @@ class AgentRuntime:
             )
 
             if not result.success:
+                self._audit(
+                    state,
+                    "tool_execution",
+                    tool.name,
+                    "failed",
+                    {
+                        "error": result.error,
+                        "attempts": result.attempts,
+                    },
+                )
                 state.failure_reason = result.error or "tool execution failed"
                 self._transition(state, RunStatus.FAILED, state.failure_reason)
                 self._emit(
@@ -225,6 +290,16 @@ class AgentRuntime:
                 self._checkpoint(state)
                 return state
 
+            self._audit(
+                state,
+                "tool_execution",
+                tool.name,
+                "succeeded",
+                {
+                    "attempts": result.attempts,
+                    "duplicate_suppressed": result.duplicate_suppressed,
+                },
+            )
             state.working[tool.name] = result.output
             state.step_index += 1
             state.version += 1
@@ -249,8 +324,17 @@ class AgentRuntime:
         last: ToolResult | None = None
 
         for attempt in range(1, policy.max_attempts + 1):
+            if not self.circuit_breaker.allow(name):
+                return ToolResult(
+                    success=False,
+                    error="circuit_open",
+                    attempts=attempt,
+                )
+
             result = self.tool_executor.execute(
-                name, arguments, self.config.timeout_seconds
+                name,
+                arguments,
+                self.config.timeout_seconds,
             )
             last = ToolResult(
                 success=result.success,
@@ -258,7 +342,22 @@ class AgentRuntime:
                 error=result.error,
                 attempts=attempt,
             )
+
             if result.success:
+                self.circuit_breaker.record_success(name)
+                return last
+
+            circuit_opened = self.circuit_breaker.record_failure(name)
+            if circuit_opened:
+                self._emit(
+                    state,
+                    EventType.TERMINATION,
+                    {
+                        "status": "failed",
+                        "reason": "circuit opened",
+                        "tool_name": name,
+                    },
+                )
                 return last
 
             if not policy.should_retry(result, attempt):
