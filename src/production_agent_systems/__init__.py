@@ -1,6 +1,8 @@
 """Production Agent Systems — reliable agent runtime foundations."""
 
+from .audit import AuditRecord, AuditSink, InMemoryAuditSink
 from .events import Event, EventSink, EventType, InMemoryEventSink
+from .model import ModelCompletion, ModelProvider
 from .models import (
     ActionKind,
     AgentAction,
@@ -14,7 +16,7 @@ from .models import (
 )
 from .planner import DeterministicPlanner, Planner
 from .policy import PermissionPolicy
-from .reliability import RetryPolicy
+from .reliability import CircuitBreaker, RetryPolicy
 from .replay import ReplayEngine, ReplayResult
 from .runtime import AgentRuntime, RuntimeConfig
 from .state import CheckpointStore, InMemoryStateStore, StateStore
@@ -27,13 +29,19 @@ __all__ = [
     "AgentAction",
     "AgentRuntime",
     "AgentState",
+    "AuditRecord",
+    "AuditSink",
     "CheckpointStore",
+    "CircuitBreaker",
     "DeterministicPlanner",
     "Event",
     "EventSink",
     "EventType",
+    "InMemoryAuditSink",
     "InMemoryEventSink",
     "InMemoryStateStore",
+    "ModelCompletion",
+    "ModelProvider",
     "Observation",
     "PermissionPolicy",
     "Planner",
