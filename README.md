@@ -1,10 +1,10 @@
 # Production Agent Systems
 
-A production-oriented, provider-neutral agent runtime that demonstrates **state, tools, runtime policy, reliability, checkpoint/recovery, trace, and replay** as explicit engineering boundaries.
+A production-oriented, provider-neutral agent runtime that demonstrates **state, tools, runtime policy, reliability, checkpoint/recovery, trace, audit, replay, and dependency protection** as explicit engineering boundaries.
 
 ## V1
 
-V1 is a runnable core runtime, not a prompt demo. It executes an end-to-end agent trajectory with deterministic planning, structured tool contracts, permission checks, bounded retries/timeouts, idempotent side effects, checkpoints, recovery, and replayable events.
+V1 is a runnable core runtime, not a prompt demo. It executes an end-to-end agent trajectory with deterministic planning, structured tool contracts, permission checks, bounded retries/timeouts, idempotent side effects, checkpoints, recovery, circuit breaking, separate audit records, and replayable events.
 
     Planner decision
           ↓
@@ -12,11 +12,11 @@ V1 is a runnable core runtime, not a prompt demo. It executes an end-to-end agen
           ↓
     Tool validation
           ↓
-    Retry / timeout
+    Retry / timeout / circuit breaker
           ↓
     State + checkpoint
           ↓
-    Trace
+    Trace + audit
           ↓
     Replay
 
@@ -38,4 +38,4 @@ Development dependencies are declared for pytest, Ruff, and mypy. CI runs the te
 
 ## Roadmap After V1
 
-The larger execution plan continues with model gateway/routing, caching, AI-security controls, deterministic degradation, cost/latency telemetry, fault-injection benchmarks, evaluation integration, API/operational surfaces, and architecture evidence.
+The larger execution plan continues with richer model gateway/routing, caching, AI-security controls, deterministic degradation, cost/latency telemetry, fault-injection benchmarks, evaluation integration, API/operational surfaces, and architecture evidence.
