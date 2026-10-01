@@ -143,6 +143,7 @@ class AgentRuntime:
 
         while state.status is RunStatus.RUNNING:
             action = self.planner.next_action(state)
+            action.validate()
             self._emit(
                 state,
                 EventType.DECISION,
