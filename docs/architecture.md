@@ -1,26 +1,37 @@
-# Initial Architecture Boundary
+# Architecture
 
-The first repository unit establishes the physical project boundaries before agent behavior is introduced.
+V1 keeps the planner's decision separate from execution authority.
 
-    Client / future API
-           |
-           v
-    Agent Runtime (future)
-           |
-      +----+----+----------------+
-      |         |                |
-    State     Policy       Model Gateway
-    (future)  (future)        (future)
-      |         |                |
-      +---------+----------------+
-                |
-             Tools (future)
-                |
-           Observability
-              (future)
+    +-------------------+
+    | Deterministic     |
+    | Planner (V1)      |
+    +---------+---------+
+              |
+              v
+    +---------+---------+
+    |   Agent Runtime   |
+    +---+-----+-----+---+
+        |     |     |
+        |     |     +----------------+
+        |     |                      |
+        v     v                      v
+      State  Policy                Events
+        |     |                      |
+        v     v                      v
+    Checkpoint Tool Registry     Trace / Replay
+                  |
+                  v
+            Timeout / Retry
+                  |
+                  v
+                 Tool
 
-At this stage the diagram is an architectural boundary, not an implementation claim. Future units will add the runtime contracts one boundary at a time and verify each with executable tests.
+The planner proposes. The runtime authorizes, validates, executes, checkpoints, and records what happened.
 
-## Design Constraint
+## Reliability Boundary
 
-The agent's eventual model/planner decision must never be treated as runtime authorization. The runtime will remain the authority for validation, permission, side effects, reliability policy, and state transitions.
+A successful side effect is checkpointed together with an idempotency key before execution continues. A resumed workflow therefore has enough information to avoid blindly repeating the same side effect.
+
+## V1 Limitation
+
+The checkpoint and event implementations are in-memory reference implementations. The interfaces are deliberately replaceable; durable storage, external tracing, and multi-process execution belong to later phases.
