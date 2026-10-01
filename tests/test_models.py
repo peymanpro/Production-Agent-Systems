@@ -42,3 +42,15 @@ def test_invalid_transition_is_rejected():
         pass
     else:
         raise AssertionError("invalid transition was accepted")
+
+
+def test_invalid_tool_action_is_rejected():
+    from production_agent_systems import ActionKind, AgentAction
+
+    invalid = AgentAction(kind=ActionKind.TOOL)
+    try:
+        invalid.validate()
+    except ValueError as exc:
+        assert str(exc) == "tool action must specify tool_name"
+    else:
+        raise AssertionError("invalid planner action was accepted")
