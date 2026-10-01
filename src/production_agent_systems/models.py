@@ -45,6 +45,16 @@ class AgentAction:
     reason: str = ""
     idempotency_key: str | None = None
 
+    def validate(self) -> None:
+        if self.kind is ActionKind.TOOL and not self.tool_name:
+            raise ValueError("tool action must specify tool_name")
+        if self.kind is ActionKind.FINISH and self.tool_name is not None:
+            raise ValueError("finish action cannot specify tool_name")
+        if not isinstance(self.arguments, dict):
+            raise ValueError("action arguments must be an object")
+        if self.idempotency_key is not None and not self.idempotency_key.strip():
+            raise ValueError("idempotency key must not be empty")
+
     @classmethod
     def call_tool(
         cls,
@@ -54,17 +64,21 @@ class AgentAction:
         reason: str = "",
         idempotency_key: str | None = None,
     ) -> AgentAction:
-        return cls(
+        action = cls(
             kind=ActionKind.TOOL,
             tool_name=tool_name,
             arguments=arguments,
             reason=reason,
             idempotency_key=idempotency_key,
         )
+        action.validate()
+        return action
 
     @classmethod
     def finish(cls, reason: str = "") -> AgentAction:
-        return cls(kind=ActionKind.FINISH, reason=reason)
+        action = cls(kind=ActionKind.FINISH, reason=reason)
+        action.validate()
+        return action
 
 
 @dataclass(frozen=True)
