@@ -1,0 +1,7 @@
+[application]
+name = "production-agent-systems"
+environment = "development"
+
+[agent]
+# Agent runtime settings are added in later phases.
+enabled = false
