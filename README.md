@@ -1,21 +1,41 @@
 # Production Agent Systems
 
-Production-oriented engineering of an LLM-driven agent runtime with explicit state, tools, policy, reliability, security, recovery, observability, and evaluation boundaries.
+A production-oriented, provider-neutral agent runtime that demonstrates **state, tools, runtime policy, reliability, checkpoint/recovery, trace, and replay** as explicit engineering boundaries.
 
-> Status: Repository foundation initialized. Agent behavior is intentionally not implemented yet.
+## V1
 
-## Purpose
+V1 is a runnable core runtime, not a prompt demo. It executes an end-to-end agent trajectory with deterministic planning, structured tool contracts, permission checks, bounded retries/timeouts, idempotent side effects, checkpoints, recovery, and replayable events.
 
-This project is a capstone for engineering AI agents as operational systems rather than prompt-and-tool demos. The implementation will keep model decisions separate from runtime authority and will make important execution behavior testable and observable.
+    Planner decision
+          ↓
+    Runtime policy
+          ↓
+    Tool validation
+          ↓
+    Retry / timeout
+          ↓
+    State + checkpoint
+          ↓
+    Trace
+          ↓
+    Replay
 
-## Current Foundation
+## Quick Start
 
-The repository establishes a clean Python package layout with src/, tests/, docs/, examples/, and config/ boundaries. The first implementation unit does not add a planner, model provider, tool execution engine, or production API.
-
-## Development
-
-    python -m venv .venv
     python -m pip install -e .
-    python -m unittest discover -s tests -v
+    python -m pytest -q
+    python examples/demo.py
 
-Pytest, Ruff, and mypy are introduced in the next foundation unit.
+## Repository Role
+
+This project is the capstone in a portfolio progression from agent concepts and LLM application engineering toward reliable production AI systems. V1 deliberately stays provider-neutral so reliability and runtime boundaries can be tested without network access or a specific model vendor.
+
+See docs/v1.md for the V1 boundary and docs/architecture.md for the runtime architecture.
+
+## Quality
+
+Development dependencies are declared for pytest, Ruff, and mypy. CI runs the test suite and static quality gates on pushes and pull requests.
+
+## Roadmap After V1
+
+The larger execution plan continues with model gateway/routing, caching, AI-security controls, deterministic degradation, cost/latency telemetry, fault-injection benchmarks, evaluation integration, API/operational surfaces, and architecture evidence.
