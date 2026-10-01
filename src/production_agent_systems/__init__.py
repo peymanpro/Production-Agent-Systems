@@ -15,6 +15,8 @@ from .models import (
 from .planner import DeterministicPlanner, Planner
 from .policy import PermissionPolicy
 from .reliability import RetryPolicy
+from .replay import ReplayEngine, ReplayResult
+from .runtime import AgentRuntime, RuntimeConfig
 from .state import CheckpointStore, InMemoryStateStore, StateStore
 from .tools import ToolDefinition, ToolExecutor, ToolRegistry
 
@@ -23,6 +25,7 @@ __version__ = "1.0.0"
 __all__ = [
     "ActionKind",
     "AgentAction",
+    "AgentRuntime",
     "AgentState",
     "CheckpointStore",
     "DeterministicPlanner",
@@ -35,8 +38,11 @@ __all__ = [
     "PermissionPolicy",
     "Planner",
     "PolicyDecision",
+    "ReplayEngine",
+    "ReplayResult",
     "RetryPolicy",
     "RunStatus",
+    "RuntimeConfig",
     "StateStore",
     "Task",
     "ToolDefinition",
