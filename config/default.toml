@@ -1,7 +1,12 @@
 [application]
 name = "production-agent-systems"
 environment = "development"
+version = "1.0.0"
 
 [agent]
-# Agent runtime settings are added in later phases.
-enabled = false
+provider = "deterministic"
+confirmation_required_for_mutations = true
+
+[reliability]
+timeout_seconds = 2.0
+max_attempts = 3
