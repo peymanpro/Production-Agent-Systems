@@ -45,6 +45,15 @@ jobs:
           set -euo pipefail
           project_version="$(python -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')"
           tag="v$project_version"
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+          if [[ "$REF_TYPE" != "tag" ]] && git ls-remote --exit-code origin "refs/tags/$tag" >/dev/null 2>&1; then
+            echo "Version tag $tag already exists. A branch update will not republish that tag; increment the project version for the next release."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "version=$project_version" >> "$GITHUB_OUTPUT"
+            echo "tag=$tag" >> "$GITHUB_OUTPUT"
+            echo "target_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           if [[ "$REF_TYPE" == "tag" ]]; then
             [[ "$REF_NAME" == "$tag" ]] || { echo "Tag $REF_NAME must match $tag." >&2; exit 1; }
           elif git ls-remote --exit-code origin "refs/tags/$tag" >/dev/null 2>&1; then
@@ -59,23 +68,29 @@ jobs:
           echo "tag=v$project_version" >> "$GITHUB_OUTPUT"
           echo "target_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
+        if: steps.version.outputs.skip != 'true'
       - name: Install project and dev tools
         run: python -m pip install --upgrade pip && pip install -e ".[dev]"
 
+        if: steps.version.outputs.skip != 'true'
       - name: Test
         run: python -m pytest -q
 
+        if: steps.version.outputs.skip != 'true'
       - name: Ruff
         run: ruff check src tests examples
 
+        if: steps.version.outputs.skip != 'true'
       - name: Mypy
         run: mypy src
 
+        if: steps.version.outputs.skip != 'true'
       - name: Build distributions
         run: |
           python -m pip install build
           python -m build
 
+        if: steps.version.outputs.skip != 'true'
       - name: Publish GitHub Release if not already published
         shell: bash
         env:
