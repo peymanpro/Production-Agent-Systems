@@ -68,30 +68,30 @@ jobs:
           echo "tag=v$project_version" >> "$GITHUB_OUTPUT"
           echo "target_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
-        if: steps.version.outputs.skip != 'true'
       - name: Install project and dev tools
+        if: steps.version.outputs.skip != 'true'
         run: python -m pip install --upgrade pip && pip install -e ".[dev]"
 
-        if: steps.version.outputs.skip != 'true'
       - name: Test
+        if: steps.version.outputs.skip != 'true'
         run: python -m pytest -q
 
-        if: steps.version.outputs.skip != 'true'
       - name: Ruff
+        if: steps.version.outputs.skip != 'true'
         run: ruff check src tests examples
 
-        if: steps.version.outputs.skip != 'true'
       - name: Mypy
+        if: steps.version.outputs.skip != 'true'
         run: mypy src
 
-        if: steps.version.outputs.skip != 'true'
       - name: Build distributions
+        if: steps.version.outputs.skip != 'true'
         run: |
           python -m pip install build
           python -m build
 
-        if: steps.version.outputs.skip != 'true'
       - name: Publish GitHub Release if not already published
+        if: steps.version.outputs.skip != 'true'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
