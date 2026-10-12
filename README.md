@@ -32,6 +32,14 @@ This project is the capstone in a portfolio progression from agent concepts and 
 
 See docs/v1.md for the V1 boundary and docs/architecture.md for the runtime architecture.
 
+## Related engineering work
+
+- [Building Software With LLMs](https://github.com/peymanpro/Building-Software-With-LLMs) focuses on the application boundary around model calls, tool use, and deterministic tests.
+- [AI Evaluation Engineering](https://github.com/peymanpro/AI-Evaluation-Engineering) provides reusable evaluation, adversarial regression, and comparison workflows.
+- [Evidence-Grounded-RAG](https://github.com/peymanpro/Evidence-Grounded-RAG) explores retrieval and citation-grounded generation.
+
+These are separate portfolio projects; this runtime does not require them as packages or services.
+
 ## Quality
 
 Development dependencies are declared for pytest, Ruff, and mypy. CI runs the test suite and static quality gates on pushes and pull requests.
