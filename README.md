@@ -52,4 +52,4 @@ The larger execution plan continues with richer model gateway/routing, caching, 
 
 The version-driven release workflow reads `[project].version` from `pyproject.toml`, runs the test suite, Ruff, and mypy, builds the Python distributions, and publishes a GitHub Release with generated notes and the build artifacts.
 
-For the next release, increment the project version to a new `MAJOR.MINOR.PATCH` value and push to `main`, or push a matching `vMAJOR.MINOR.PATCH` tag. Existing tags and releases are left unchanged. Release validation uses the provider-neutral runtime and deterministic tests; it does not require live model-provider credentials.
+For the next release, increment the project version to a new `MAJOR.MINOR.PATCH` value and push to `main`, or push a matching `vMAJOR.MINOR.PATCH` tag. Existing tags and releases are left unchanged. Release validation uses the provider-neutral runtime and deterministic tests; it does not require live model-provider credentials. A published Python distribution represents the implemented V1 runtime boundary, not every item on the future roadmap.
