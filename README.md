@@ -47,3 +47,9 @@ Development dependencies are declared for pytest, Ruff, and mypy. CI runs the te
 ## Roadmap After V1
 
 The larger execution plan continues with richer model gateway/routing, caching, AI-security controls, deterministic degradation, cost/latency telemetry, fault-injection benchmarks, evaluation integration, API/operational surfaces, and architecture evidence.
+
+## Automated releases
+
+The version-driven release workflow reads `[project].version` from `pyproject.toml`, runs the test suite, Ruff, and mypy, builds the Python distributions, and publishes a GitHub Release with generated notes and the build artifacts.
+
+For the next release, increment the project version to a new `MAJOR.MINOR.PATCH` value and push to `main`, or push a matching `vMAJOR.MINOR.PATCH` tag. Existing tags and releases are left unchanged.
