@@ -26,6 +26,10 @@ V1 is a runnable core runtime, not a prompt demo. It executes an end-to-end agen
     python -m pytest -q
     python examples/demo.py
 
+## Security Boundaries
+
+Tool arguments are validated against a bounded schema before handlers run; unknown fields are rejected by default. Mutation approvals must be passed explicitly by a trusted caller through `confirmed_mutations` to `AgentRuntime.run`. Task metadata and model output never grant permission. See [docs/security-boundaries.md](docs/security-boundaries.md) for the supported validation rules and remaining limits.
+
 ## Repository Role
 
 This project is the capstone in a portfolio progression from agent concepts and LLM application engineering toward reliable production AI systems. V1 deliberately stays provider-neutral so reliability and runtime boundaries can be tested without network access or a specific model vendor.
