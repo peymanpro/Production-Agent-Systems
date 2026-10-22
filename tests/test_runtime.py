@@ -93,12 +93,9 @@ def test_end_to_end_read_and_mutation_with_confirmation():
             ),
         ],
     )
-    task = Task(
-        "run-1",
-        "approve order",
-        {"confirmations": {"update_order": True}},
-    )
-    state = runtime.run(task)
+    # Approval is supplied explicitly by the trusted caller, not task metadata.
+    task = Task("run-1", "approve order")
+    state = runtime.run(task, confirmed_mutations=frozenset({"update_order"}))
 
     assert state.status is RunStatus.COMPLETED
     assert state.working["update_order"]["status"] == "approved"
@@ -147,7 +144,9 @@ def test_mutation_without_confirmation_enters_waiting_state():
         confirm_mutations=True,
     )
 
-    state = runtime.run(Task("run-6", "write"))
+    # Untrusted task metadata must not be able to approve a mutation.
+    task = Task("run-6", "write", {"confirmations": {"write": True}})
+    state = runtime.run(task)
 
     assert state.status is RunStatus.WAITING
     assert state.failure_reason == "confirmation required for tool: write"
