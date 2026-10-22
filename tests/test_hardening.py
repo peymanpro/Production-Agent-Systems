@@ -93,3 +93,37 @@ def test_audit_records_are_separate_from_trace_events():
     assert records
     assert all(record.run_id == "audit-1" for record in records)
     assert {record.outcome for record in records} >= {"requested", "succeeded"}
+
+
+
+def test_invalid_tool_arguments_do_not_open_dependency_circuit():
+    calls = []
+    tool = ToolDefinition(
+        "strict_reader",
+        "Read a named record",
+        {
+            "required": ["record_id"],
+            "properties": {"record_id": {"type": "string"}},
+        },
+        ToolEffect.READ,
+        "1",
+        lambda record_id: calls.append(record_id),
+    )
+    breaker = CircuitBreaker(failure_threshold=1, reset_after_calls=1)
+    runtime = AgentRuntime(
+        planner=DeterministicPlanner(
+            [AgentAction.call_tool("strict_reader", {"record_id": "R-1", "bypass": True})]
+        ),
+        registry=ToolRegistry([tool]),
+        policy=PermissionPolicy(frozenset({"strict_reader"})),
+        state_store=InMemoryStateStore(),
+        checkpoint_store=CheckpointStore(),
+        event_sink=InMemoryEventSink(),
+        circuit_breaker=breaker,
+    )
+
+    state = runtime.run(Task("invalid-input-1", "read record"))
+
+    assert state.status.value == "failed"
+    assert calls == []
+    assert breaker.allow("strict_reader") is True
