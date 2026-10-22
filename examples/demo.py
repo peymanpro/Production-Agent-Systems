@@ -74,12 +74,12 @@ runtime = AgentRuntime(
 
 
 if __name__ == "__main__":
-    task = Task(
-        "demo-1",
-        "Suspend customer C-42",
-        {"confirmations": {"suspend_customer": True}},
+    # This example stands in for a trusted caller that has received approval.
+    task = Task("demo-1", "Suspend customer C-42")
+    result = runtime.run(
+        task,
+        confirmed_mutations=frozenset({"suspend_customer"}),
     )
-    result = runtime.run(task)
     print("status:", result.status.value)
     print("steps:", result.step_index)
     print("events:", len(sink.events(task.task_id)))

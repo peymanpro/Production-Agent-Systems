@@ -122,7 +122,14 @@ class AgentRuntime:
         *,
         resume: bool = False,
         stop_after_steps: int | None = None,
+        confirmed_mutations: frozenset[str] = frozenset(),
     ) -> AgentState:
+        """Run a task with explicit confirmations from a trusted outer layer.
+
+        Only pass a tool name in confirmed_mutations after receiving explicit approval
+        outside the task/model input. Never derive this set from Task.metadata or model output.
+        Confirmations apply to this invocation and are not persisted in task state.
+        """
         state = self.checkpoint_store.load(task.task_id) if resume else None
 
         if state is None:
@@ -174,9 +181,7 @@ class AgentRuntime:
             tool = self.registry.get(action.tool_name)
             decision = self.policy.evaluate(
                 tool,
-                confirmed=bool(
-                    state.task.metadata.get("confirmations", {}).get(tool.name)
-                ),
+                confirmed=tool.name in confirmed_mutations,
             )
             self._emit(
                 state,
@@ -346,6 +351,10 @@ class AgentRuntime:
 
             if result.success:
                 self.circuit_breaker.record_success(name)
+                return last
+
+            if result.error and result.error.startswith("invalid_tool_input:"):
+                # Caller errors must fail the run without poisoning dependency health.
                 return last
 
             circuit_opened = self.circuit_breaker.record_failure(name)
