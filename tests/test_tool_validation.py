@@ -99,7 +99,7 @@ def test_validates_array_items_and_uniqueness() -> None:
     with pytest.raises(ValueError, match="unique items"):
         tool.validate({"ids": [1, 1]})
 
-    with pytest.raises(ValueError, match=r"ids\[1\] must be integer"):
+    with pytest.raises(ValueError, match=r"argument 'ids'\[1\] must be integer"):
         tool.validate({"ids": [1, True]})
 
 
