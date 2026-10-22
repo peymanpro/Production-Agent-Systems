@@ -353,6 +353,10 @@ class AgentRuntime:
                 self.circuit_breaker.record_success(name)
                 return last
 
+            if result.error and result.error.startswith("invalid_tool_input:"):
+                # Caller errors must fail the run without poisoning dependency health.
+                return last
+
             circuit_opened = self.circuit_breaker.record_failure(name)
             if circuit_opened:
                 self._emit(
