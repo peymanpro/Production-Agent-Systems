@@ -229,7 +229,10 @@ class ToolExecutor:
             tool.validate(arguments)
         except (TypeError, ValueError) as exc:
             # Invalid input must never reach a handler and is not retryable by default.
-            return ToolResult(success=False, error=f"{type(exc).__name__}: {exc}")
+            return ToolResult(
+                success=False,
+                error=f"invalid_tool_input: {type(exc).__name__}: {exc}",
+            )
 
         if timeout_seconds is None:
             try:
