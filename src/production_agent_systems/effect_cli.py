@@ -28,6 +28,7 @@ def _operation_summary(record) -> dict[str, Any]:
     return {
         "operation_id": record.operation_id,
         "contract_name": record.contract_name,
+        "contract_version": record.contract_version,
         "status": record.status.value,
         "attempts": record.attempts,
         "provider_operation_id": record.provider_operation_id,
