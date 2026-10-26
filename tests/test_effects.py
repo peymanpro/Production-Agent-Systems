@@ -340,3 +340,64 @@ def test_agent_runtime_waits_on_uncertain_effect_then_resumes_after_reconciliati
     assert resumed.status is RunStatus.COMPLETED
     assert len(provider.committed_effects) == 1
     assert probe_calls == 2
+
+def test_handler_timeout_preserves_uncertainty_until_late_effect_is_observed(tmp_path):
+    from threading import Event
+
+    entered = Event()
+    release = Event()
+    committed: list[dict[str, str]] = []
+
+    def handler(arguments, *, idempotency_key):
+        entered.set()
+        assert release.wait(timeout=3)
+        result = {"resource_id": arguments["resource_id"], "status": "created"}
+        committed.append(result)
+        return result
+
+    def probe(arguments, *, idempotency_key):
+        if committed:
+            return OutcomeProbeResult(
+                status=ProbeStatus.COMMITTED,
+                output=committed[0],
+                evidence={"source": "test provider"},
+            )
+        return OutcomeProbeResult(
+            status=ProbeStatus.UNKNOWN,
+            evidence={"reason": "handler may still be running"},
+        )
+
+    contract = EffectContract(
+        name="create_resource",
+        operation_id=lambda args: f"resource:{args['resource_id']}:create:v1",
+        outcome_probe=probe,
+    )
+    executor = EffectExecutor(
+        ledger=SQLiteEffectLedger(tmp_path / "effects.sqlite3")
+    )
+
+    first = executor.execute(
+        contract=contract,
+        arguments={"resource_id": "R-LATE"},
+        handler=handler,
+        handler_timeout_seconds=0.01,
+    )
+    assert entered.is_set()
+    assert first.status is EffectStatus.QUARANTINED
+
+    release.set()
+    from time import sleep
+
+    deadline = __import__("time").monotonic() + 2
+    while not committed and __import__("time").monotonic() < deadline:
+        sleep(0.01)
+    assert len(committed) == 1
+
+    recovered = executor.execute(
+        contract=contract,
+        arguments={"resource_id": "R-LATE"},
+        handler=handler,
+        handler_timeout_seconds=0.01,
+    )
+    assert recovered.status is EffectStatus.CONFIRMED
+    assert len(committed) == 1
