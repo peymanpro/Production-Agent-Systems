@@ -92,6 +92,37 @@ Effect-backed tools require a configured executor. Their handler timeout is rout
 
 When an effect result is `OUTCOME_UNKNOWN`, `QUARANTINED`, `DISPATCHED`, or `PREPARED`, AgentRuntime transitions the run to `WAITING`. Resuming the same task replays the same logical action through the ledger, allowing the provider result to be reconciled before the planner continues.
 
+
+## Inspect and manually resolve an uncertain operation
+
+List recent operations or filter for quarantined records:
+
+```python
+ledger = SQLiteEffectLedger("agent-effects.sqlite3")
+quarantined = ledger.list_operations(status=EffectStatus.QUARANTINED)
+for operation in quarantined:
+    print(operation.operation_id, operation.status, operation.error)
+    print(ledger.events(operation.operation_id))
+```
+
+When an authoritative provider lookup is unavailable, a trusted operator may resolve a quarantined record after independently establishing its outcome:
+
+```python
+# Use only after checking the authoritative provider record.
+executor.resolve_manually_confirmed(
+    operation_id,
+    output={"payment_id": "pay-123", "status": "captured"},
+    provider_operation_id="pay-123",
+    actor="on-call-operator",
+    reason="Verified the capture in the provider dashboard",
+    evidence_reference="INC-1042/provider-event-1",
+)
+```
+
+If the operator instead establishes that the previous request is terminal and definitely did not take effect, call `authorize_manual_retry(...)` with the actor, reason, and evidence reference. `resolve_manually_rejected(...)` records an evidenced terminal rejection. All three APIs accept only operations in `OUTCOME_UNKNOWN` or `QUARANTINED`; they do not override a confirmed or actively dispatched operation.
+
+These APIs record an audit trail; they do not authenticate the operator or validate the contents of an evidence reference. The integrating application must authenticate and authorize the operator, verify evidence independently, and ensure a retry cannot race with an earlier request that is still capable of committing.
+
 ## Guarantees and boundaries
 
 The library can atomically coordinate operation records in its SQLite ledger and prevent concurrent claims while a dispatch lease is active. It cannot atomically commit a remote payment and a local SQLite row. In particular, universal exactly-once external effects cannot be promised without a cooperating destination or authoritative evidence that lets the executor safely resolve an uncertain attempt.
