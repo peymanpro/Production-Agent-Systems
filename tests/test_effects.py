@@ -506,3 +506,66 @@ def test_manual_resolution_requires_a_recorded_actor_reason_and_evidence(tmp_pat
             reason="Checked",
             evidence_reference="INC-1",
         )
+
+def test_provider_idempotency_key_allows_retry_when_probe_is_unknown(tmp_path):
+    provider = FaultInjectingPaymentProvider(
+        fault_point=FaultPoint.AFTER_COMMIT_BEFORE_ACK
+    )
+    probe_calls = 0
+
+    def uncertain_probe(arguments, *, idempotency_key):
+        nonlocal probe_calls
+        probe_calls += 1
+        return OutcomeProbeResult(
+            status=ProbeStatus.UNKNOWN,
+            evidence={"source": "provider query", "query_attempt": probe_calls},
+        )
+
+    contract = EffectContract(
+        name="capture_payment",
+        operation_id=lambda args: f"invoice:{args['invoice_id']}:capture:v1",
+        provider_idempotency_key=lambda args: f"capture:{args['invoice_id']}",
+        provider_idempotency_guaranteed=True,
+        outcome_probe=uncertain_probe,
+    )
+    result = EffectExecutor(
+        ledger=SQLiteEffectLedger(tmp_path / "effects.sqlite3")
+    ).execute(
+        contract=contract,
+        arguments={"invoice_id": "INV-UNKNOWN-PROBE"},
+        handler=provider.capture,
+    )
+
+    assert result.status is EffectStatus.CONFIRMED
+    assert result.attempts == 2
+    assert len(provider.committed_effects) == 1
+
+
+def test_provider_idempotency_key_allows_retry_when_probe_raises(tmp_path):
+    provider = FaultInjectingPaymentProvider(
+        fault_point=FaultPoint.AFTER_COMMIT_BEFORE_ACK
+    )
+    contract = EffectContract(
+        name="capture_payment",
+        operation_id=lambda args: f"invoice:{args['invoice_id']}:capture:v1",
+        provider_idempotency_key=lambda args: f"capture:{args['invoice_id']}",
+        provider_idempotency_guaranteed=True,
+        outcome_probe=lambda arguments, *, idempotency_key: (
+            _raise_probe_error()
+        ),
+    )
+    result = EffectExecutor(
+        ledger=SQLiteEffectLedger(tmp_path / "effects.sqlite3")
+    ).execute(
+        contract=contract,
+        arguments={"invoice_id": "INV-PROBE-ERROR"},
+        handler=provider.capture,
+    )
+
+    assert result.status is EffectStatus.CONFIRMED
+    assert result.attempts == 2
+    assert len(provider.committed_effects) == 1
+
+
+def _raise_probe_error():
+    raise ConnectionError("provider outcome endpoint unavailable")
