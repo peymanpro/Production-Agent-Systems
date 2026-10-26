@@ -1007,6 +1007,17 @@ class EffectExecutor:
                 message = (
                     f"{type(exc).__name__}: outcome probe failed; external outcome remains unknown"
                 )
+                if allow_idempotent_retry and contract.provider_idempotency_guaranteed:
+                    # A documented provider idempotency contract is sufficient to retry
+                    # with the same key even when the reconciliation query is unavailable.
+                    self.ledger.reset_for_retry(
+                        operation_id,
+                        evidence={
+                            "retry_basis": "provider idempotency contract after probe failure",
+                            "provider_idempotency_key": record.provider_idempotency_key,
+                        },
+                    )
+                    return None
                 if contract.unknown_outcome is UnknownOutcomePolicy.QUARANTINE:
                     self.ledger.mark_quarantined(operation_id, message)
                 else:
@@ -1064,6 +1075,16 @@ class EffectExecutor:
                 return self._result(current)
 
             message = "provider could not establish the external operation outcome"
+            if allow_idempotent_retry and contract.provider_idempotency_guaranteed:
+                self.ledger.reset_for_retry(
+                    operation_id,
+                    evidence={
+                        **evidence,
+                        "retry_basis": "provider idempotency contract",
+                        "provider_idempotency_key": record.provider_idempotency_key,
+                    },
+                )
+                return None
             if contract.unknown_outcome is UnknownOutcomePolicy.QUARANTINE:
                 self.ledger.mark_quarantined(operation_id, message, evidence=evidence)
             else:
