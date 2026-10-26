@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from typing import Any, Callable
 
 
+from .effects import EffectContract, EffectExecutor, EffectStatus, OperationConflictError
 from .models import ToolEffect, ToolResult
 
 
@@ -161,6 +162,7 @@ class ToolDefinition:
     effect: ToolEffect
     version: str
     handler: Callable[..., Any]
+    effect_contract: EffectContract | None = None
 
     def validate(self, arguments: dict[str, Any]) -> None:
         """Validate tool arguments; undeclared fields are rejected by default."""
@@ -218,8 +220,14 @@ class ToolRegistry:
 
 
 class ToolExecutor:
-    def __init__(self, registry: ToolRegistry) -> None:
+    def __init__(
+        self,
+        registry: ToolRegistry,
+        *,
+        effect_executor: EffectExecutor | None = None,
+    ) -> None:
         self.registry = registry
+        self.effect_executor = effect_executor
 
     def execute(
         self, name: str, arguments: dict[str, Any], timeout_seconds: float | None = None
@@ -232,6 +240,36 @@ class ToolExecutor:
             return ToolResult(
                 success=False,
                 error=f"invalid_tool_input: {type(exc).__name__}: {exc}",
+            )
+
+        if tool.effect_contract is not None:
+            if self.effect_executor is None:
+                raise RuntimeError(
+                    f"tool {name!r} declares an effect contract but no EffectExecutor was configured"
+                )
+            try:
+                effect_result = self.effect_executor.execute(
+                    contract=tool.effect_contract,
+                    arguments=arguments,
+                    handler=tool.handler,
+                )
+            except OperationConflictError:
+                return ToolResult(
+                    success=False,
+                    error="operation_conflict: operation ID was reused with different request data",
+                    effect_status="conflict",
+                )
+            success = effect_result.status is EffectStatus.CONFIRMED
+            return ToolResult(
+                success=success,
+                output=effect_result.output,
+                error=effect_result.error
+                or (None if success else f"effect_{effect_result.status.value}"),
+                attempts=effect_result.attempts,
+                duplicate_suppressed=effect_result.duplicate_suppressed,
+                effect_status=effect_result.status.value,
+                operation_id=effect_result.operation_id,
+                in_progress=effect_result.in_progress,
             )
 
         if timeout_seconds is None:
