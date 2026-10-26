@@ -787,18 +787,19 @@ class EffectExecutor:
     ) -> EffectResult:
         if handler_timeout_seconds is not None and handler_timeout_seconds <= 0:
             raise ValueError("handler_timeout_seconds must be positive")
-        payload = dict(arguments)
         try:
-            canonical = _json_dumps(payload)
+            canonical = _json_dumps(dict(arguments))
         except (TypeError, ValueError) as exc:
             raise ValueError("effect arguments must be finite JSON-compatible data") from exc
 
-        operation_id = contract.operation_id(payload)
+        # Treat the canonical request as the immutable source of truth. User callbacks
+        # and handlers receive fresh decoded copies so they cannot mutate later probes.
+        operation_id = contract.operation_id(json.loads(canonical))
         if not isinstance(operation_id, str) or not operation_id.strip():
             raise ValueError("contract operation_id must return a non-empty string")
 
         provider_key = (
-            contract.provider_idempotency_key(payload)
+            contract.provider_idempotency_key(json.loads(canonical))
             if contract.provider_idempotency_key is not None
             else None
         )
@@ -846,7 +847,7 @@ class EffectExecutor:
             if record.status in {EffectStatus.OUTCOME_UNKNOWN, EffectStatus.QUARANTINED}:
                 reconciled = self._reconcile(
                     contract=contract,
-                    arguments=payload,
+                    arguments=json.loads(canonical),
                     operation_id=operation_id,
                     allow_idempotent_retry=True,
                 )
@@ -881,7 +882,7 @@ class EffectExecutor:
             try:
                 output = self._invoke_handler(
                     handler,
-                    payload,
+                    json.loads(canonical),
                     provider_key,
                     timeout_seconds=handler_timeout_seconds,
                 )
@@ -916,7 +917,7 @@ class EffectExecutor:
 
             if contract.postcondition is not None:
                 try:
-                    condition_met = contract.postcondition(payload, output)
+                    condition_met = contract.postcondition(json.loads(canonical), output)
                 except Exception as exc:
                     condition_met = False
                     postcondition_error = (
@@ -1013,6 +1014,10 @@ class EffectExecutor:
         """Return a result if execution must stop; None means retry was authorized."""
         record = self.ledger.get(operation_id)
         assert record is not None
+        try:
+            canonical_arguments = _json_dumps(dict(arguments))
+        except (TypeError, ValueError) as exc:
+            raise ValueError("reconciliation arguments must be finite JSON-compatible data") from exc
         if record.status is EffectStatus.CONFIRMED:
             return self._result(record, duplicate_suppressed=True)
         if record.status is EffectStatus.REJECTED:
@@ -1021,7 +1026,7 @@ class EffectExecutor:
         if contract.outcome_probe is not None:
             try:
                 probe = contract.outcome_probe(
-                    arguments,
+                    json.loads(canonical_arguments),
                     idempotency_key=record.provider_idempotency_key,
                 )
                 if not isinstance(probe, OutcomeProbeResult):
@@ -1055,7 +1060,9 @@ class EffectExecutor:
             if probe.status is ProbeStatus.COMMITTED:
                 if contract.postcondition is not None:
                     try:
-                        condition_met = contract.postcondition(arguments, probe.output)
+                        condition_met = contract.postcondition(
+                            json.loads(canonical_arguments), probe.output
+                        )
                     except Exception:
                         condition_met = False
                     if not condition_met:
