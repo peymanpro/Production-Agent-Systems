@@ -5,6 +5,7 @@ import json
 import sqlite3
 import time
 import uuid
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -594,7 +595,10 @@ class EffectExecutor:
         contract: EffectContract,
         arguments: Mapping[str, Any],
         handler: Callable[..., Any],
+        handler_timeout_seconds: float | None = None,
     ) -> EffectResult:
+        if handler_timeout_seconds is not None and handler_timeout_seconds <= 0:
+            raise ValueError("handler_timeout_seconds must be positive")
         payload = dict(arguments)
         try:
             canonical = _json_dumps(payload)
@@ -674,7 +678,12 @@ class EffectExecutor:
                 continue
 
             try:
-                output = handler(payload, idempotency_key=provider_key)
+                output = self._invoke_handler(
+                    handler,
+                    payload,
+                    provider_key,
+                    timeout_seconds=handler_timeout_seconds,
+                )
             except EffectRejected as exc:
                 self.ledger.mark_rejected(
                     operation_id,
@@ -766,6 +775,31 @@ class EffectExecutor:
         record = self.ledger.get(operation_id)
         assert record is not None
         return self._result(record)
+
+    @staticmethod
+    def _invoke_handler(
+        handler: Callable[..., Any],
+        arguments: Mapping[str, Any],
+        provider_key: str | None,
+        *,
+        timeout_seconds: float | None,
+    ) -> Any:
+        if timeout_seconds is None:
+            return handler(arguments, idempotency_key=provider_key)
+
+        pool = ThreadPoolExecutor(max_workers=1)
+        future = pool.submit(handler, arguments, idempotency_key=provider_key)
+        try:
+            return future.result(timeout=timeout_seconds)
+        except FutureTimeoutError as exc:
+            # Cancelling a running Python thread cannot stop a remote side effect.
+            # Preserve uncertainty; the provider contract must settle the outcome.
+            future.cancel()
+            raise TimeoutError(
+                "effect handler timed out; external work may still be running"
+            ) from exc
+        finally:
+            pool.shutdown(wait=False, cancel_futures=True)
 
     def _reconcile(
         self,
