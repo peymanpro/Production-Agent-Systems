@@ -66,6 +66,7 @@ class EffectContract:
 
     name: str
     operation_id: Callable[[Mapping[str, Any]], str]
+    version: str = "1"
     provider_idempotency_key: Callable[[Mapping[str, Any]], str] | None = None
     provider_idempotency_guaranteed: bool = False
     outcome_probe: Callable[..., OutcomeProbeResult] | None = None
@@ -75,6 +76,8 @@ class EffectContract:
     def __post_init__(self) -> None:
         if not self.name.strip():
             raise ValueError("contract name must not be empty")
+        if not isinstance(self.version, str) or not self.version.strip():
+            raise ValueError("contract version must be a non-empty string")
         if self.provider_idempotency_guaranteed and self.provider_idempotency_key is None:
             raise ValueError(
                 "provider_idempotency_guaranteed requires provider_idempotency_key"
@@ -85,6 +88,7 @@ class EffectContract:
 class EffectRecord:
     operation_id: str
     contract_name: str
+    contract_version: str
     request_fingerprint: str
     provider_idempotency_key: str | None
     status: EffectStatus
@@ -122,6 +126,7 @@ class EffectLedger(Protocol):
         self,
         operation_id: str,
         contract_name: str,
+        contract_version: str,
         request_fingerprint: str,
         provider_idempotency_key: str | None,
     ) -> EffectRecord: ...
@@ -243,6 +248,7 @@ class SQLiteEffectLedger:
                 CREATE TABLE IF NOT EXISTS effect_operations (
                     operation_id TEXT PRIMARY KEY,
                     contract_name TEXT NOT NULL,
+                    contract_version TEXT NOT NULL DEFAULT '1',
                     request_fingerprint TEXT NOT NULL,
                     provider_idempotency_key TEXT,
                     status TEXT NOT NULL,
@@ -267,6 +273,14 @@ class SQLiteEffectLedger:
                     ON effect_events(operation_id, sequence);
                 """
             )
+            columns = {
+                row["name"]
+                for row in connection.execute("PRAGMA table_info(effect_operations)").fetchall()
+            }
+            if "contract_version" not in columns:
+                connection.execute(
+                    "ALTER TABLE effect_operations ADD COLUMN contract_version TEXT NOT NULL DEFAULT '1'"
+                )
         finally:
             connection.close()
 
@@ -293,6 +307,7 @@ class SQLiteEffectLedger:
         return EffectRecord(
             operation_id=row["operation_id"],
             contract_name=row["contract_name"],
+            contract_version=row["contract_version"],
             request_fingerprint=row["request_fingerprint"],
             provider_idempotency_key=row["provider_idempotency_key"],
             status=EffectStatus(row["status"]),
@@ -312,6 +327,7 @@ class SQLiteEffectLedger:
         self,
         operation_id: str,
         contract_name: str,
+        contract_version: str,
         request_fingerprint: str,
         provider_idempotency_key: str | None,
     ) -> EffectRecord:
@@ -325,13 +341,14 @@ class SQLiteEffectLedger:
                 connection.execute(
                     """
                     INSERT INTO effect_operations(
-                        operation_id, contract_name, request_fingerprint,
+                        operation_id, contract_name, contract_version, request_fingerprint,
                         provider_idempotency_key, status, created_at, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         operation_id,
                         contract_name,
+                        contract_version,
                         request_fingerprint,
                         provider_idempotency_key,
                         EffectStatus.PREPARED.value,
@@ -343,7 +360,11 @@ class SQLiteEffectLedger:
                     connection,
                     operation_id,
                     "prepared",
-                    {"contract_name": contract_name, "request_fingerprint": request_fingerprint},
+                    {
+                        "contract_name": contract_name,
+                        "contract_version": contract_version,
+                        "request_fingerprint": request_fingerprint,
+                    },
                 )
                 row = connection.execute(
                     "SELECT * FROM effect_operations WHERE operation_id = ?",
@@ -352,11 +373,12 @@ class SQLiteEffectLedger:
             else:
                 if (
                     row["contract_name"] != contract_name
+                    or row["contract_version"] != contract_version
                     or row["request_fingerprint"] != request_fingerprint
                     or row["provider_idempotency_key"] != provider_idempotency_key
                 ):
                     raise OperationConflictError(
-                        "operation_id already belongs to a different contract, request, or provider key"
+                        "operation_id already belongs to a different contract version, request, or provider key"
                     )
             record = self._to_record(row)
         assert record is not None
@@ -789,6 +811,7 @@ class EffectExecutor:
         self.ledger.prepare(
             operation_id,
             contract.name,
+            contract.version,
             fingerprint,
             provider_key,
         )
