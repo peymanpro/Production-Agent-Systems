@@ -345,8 +345,9 @@ class AgentRuntime:
         policy = self.config.retry_policy
         last: ToolResult | None = None
 
+        effect_backed = self.registry.get(name).effect_contract is not None
         for attempt in range(1, policy.max_attempts + 1):
-            if not self.circuit_breaker.allow(name):
+            if not effect_backed and not self.circuit_breaker.allow(name):
                 return ToolResult(
                     success=False,
                     error="circuit_open",
