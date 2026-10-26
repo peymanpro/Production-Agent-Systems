@@ -276,6 +276,27 @@ class EffectExecutor:
             return self._result(record, duplicate_suppressed=True)
         if record.status is EffectStatus.REJECTED:
             return self._result(record)
+        if record.status is EffectStatus.DISPATCHED:
+            if record.lease_until is not None and record.lease_until > time.time():
+                return self._result(record, in_progress=True)
+            self.ledger.mark_outcome_unknown(
+                operation_id,
+                "dispatch lease expired during reconciliation; outcome must be rechecked",
+                owner_token=record.owner_token,
+            )
+            record = self.ledger.get(operation_id)
+            assert record is not None
+            if record.status is EffectStatus.DISPATCHED:
+                return self._result(
+                    record,
+                    in_progress=record.lease_until is not None
+                    and record.lease_until > time.time(),
+                )
+        if record.status not in {
+            EffectStatus.OUTCOME_UNKNOWN,
+            EffectStatus.QUARANTINED,
+        }:
+            return self._result(record)
 
         if contract.outcome_probe is not None:
             try:
@@ -320,9 +341,13 @@ class EffectExecutor:
                     except Exception:
                         condition_met = False
                     if not condition_met:
-                        self.ledger.mark_outcome_unknown(
+                        self.ledger.mark_quarantined(
                             operation_id,
                             "probe found a commit but the required postcondition was not satisfied",
+                            evidence={
+                                **evidence,
+                                "postcondition": "failed",
+                            },
                         )
                         current = self.ledger.get(operation_id)
                         assert current is not None
@@ -341,7 +366,16 @@ class EffectExecutor:
                     )
                 current = self.ledger.get(operation_id)
                 assert current is not None
-                return self._result(current, duplicate_suppressed=True)
+                if (
+                    current.status is EffectStatus.DISPATCHED
+                    and current.lease_until is not None
+                    and current.lease_until > time.time()
+                ):
+                    return self._result(current, in_progress=True)
+                return self._result(
+                    current,
+                    duplicate_suppressed=current.status is EffectStatus.CONFIRMED,
+                )
 
             if probe.status is ProbeStatus.NOT_COMMITTED:
                 # This status is a contract assertion: the provider has established
