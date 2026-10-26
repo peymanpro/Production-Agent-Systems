@@ -460,12 +460,18 @@ class SQLiteEffectLedger:
                 "SELECT * FROM effect_operations WHERE operation_id = ?",
                 (operation_id,),
             ).fetchone()
-            if row is None or row["status"] in {
-                EffectStatus.CONFIRMED.value,
-                EffectStatus.REJECTED.value,
-            }:
+            if row is None:
                 return False
-            if owner_token is not None and row["owner_token"] != owner_token:
+            if owner_token is None:
+                if row["status"] not in {
+                    EffectStatus.OUTCOME_UNKNOWN.value,
+                    EffectStatus.QUARANTINED.value,
+                }:
+                    return False
+            elif (
+                row["status"] != EffectStatus.DISPATCHED.value
+                or row["owner_token"] != owner_token
+            ):
                 return False
             connection.execute(
                 """
@@ -502,13 +508,16 @@ class SQLiteEffectLedger:
                 return False
             if row["status"] == EffectStatus.CONFIRMED.value:
                 return True
-            if row["status"] not in {
-                EffectStatus.DISPATCHED.value,
-                EffectStatus.OUTCOME_UNKNOWN.value,
-                EffectStatus.QUARANTINED.value,
-            }:
-                return False
-            if owner_token is not None and row["owner_token"] != owner_token:
+            if owner_token is None:
+                if row["status"] not in {
+                    EffectStatus.OUTCOME_UNKNOWN.value,
+                    EffectStatus.QUARANTINED.value,
+                }:
+                    return False
+            elif (
+                row["status"] != EffectStatus.DISPATCHED.value
+                or row["owner_token"] != owner_token
+            ):
                 return False
             connection.execute(
                 """
@@ -572,9 +581,9 @@ class SQLiteEffectLedger:
                 "SELECT * FROM effect_operations WHERE operation_id = ?",
                 (operation_id,),
             ).fetchone()
-            if row is None or row["status"] in {
-                EffectStatus.CONFIRMED.value,
-                EffectStatus.REJECTED.value,
+            if row is None or row["status"] not in {
+                EffectStatus.OUTCOME_UNKNOWN.value,
+                EffectStatus.QUARANTINED.value,
             }:
                 return False
             connection.execute(
