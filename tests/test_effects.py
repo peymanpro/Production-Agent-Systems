@@ -765,3 +765,42 @@ def test_stale_probe_cannot_overwrite_a_new_active_dispatch(tmp_path):
     confirmed = ledger.get(operation_id)
     assert confirmed is not None
     assert confirmed.status is EffectStatus.CONFIRMED
+
+def test_committed_effect_that_fails_postcondition_is_quarantined(tmp_path):
+    calls: list[int] = []
+
+    def handler(arguments, *, idempotency_key):
+        calls.append(1)
+        return {"resource_id": arguments["resource_id"], "state": "created"}
+
+    contract = EffectContract(
+        name="create_resource",
+        operation_id=lambda args: f"resource:{args['resource_id']}:create",
+        outcome_probe=lambda arguments, *, idempotency_key: OutcomeProbeResult(
+            status=ProbeStatus.COMMITTED,
+            output={"resource_id": arguments["resource_id"], "state": "created"},
+            evidence={"source": "provider record"},
+        ),
+        postcondition=lambda arguments, output: output.get("state") == "ready",
+    )
+    ledger = SQLiteEffectLedger(tmp_path / "effects.sqlite3")
+    executor = EffectExecutor(ledger=ledger)
+
+    result = executor.execute(
+        contract=contract,
+        arguments={"resource_id": "R-POSTCONDITION"},
+        handler=handler,
+    )
+    repeated = executor.execute(
+        contract=contract,
+        arguments={"resource_id": "R-POSTCONDITION"},
+        handler=handler,
+    )
+
+    assert result.status is EffectStatus.QUARANTINED
+    assert repeated.status is EffectStatus.QUARANTINED
+    assert len(calls) == 1
+    assert any(
+        event["event_type"] == "quarantined"
+        for event in ledger.events(result.operation_id)
+    )
