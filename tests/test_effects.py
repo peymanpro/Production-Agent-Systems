@@ -569,3 +569,86 @@ def test_provider_idempotency_key_allows_retry_when_probe_raises(tmp_path):
 
 def _raise_probe_error():
     raise ConnectionError("provider outcome endpoint unavailable")
+
+def test_changed_contract_version_conflicts_with_an_existing_operation(tmp_path):
+    ledger = SQLiteEffectLedger(tmp_path / "effects.sqlite3")
+    executor = EffectExecutor(ledger=ledger)
+    args = {"invoice_id": "INV-VERSION-1"}
+    first_contract = EffectContract(
+        name="capture_payment",
+        operation_id=lambda values: f"invoice:{values['invoice_id']}:capture",
+        version="1",
+    )
+    second_contract = EffectContract(
+        name="capture_payment",
+        operation_id=lambda values: f"invoice:{values['invoice_id']}:capture",
+        version="2",
+    )
+
+    executor.execute(
+        contract=first_contract,
+        arguments=args,
+        handler=lambda arguments, *, idempotency_key: {"captured": True},
+    )
+
+    with pytest.raises(OperationConflictError, match="contract version"):
+        executor.execute(
+            contract=second_contract,
+            arguments=args,
+            handler=lambda arguments, *, idempotency_key: {"captured": True},
+        )
+
+
+def test_sqlite_ledger_migrates_legacy_rows_to_contract_version_one(tmp_path):
+    import sqlite3
+
+    database = tmp_path / "legacy-effects.sqlite3"
+    with sqlite3.connect(database) as connection:
+        connection.execute(
+            """
+            CREATE TABLE effect_operations (
+                operation_id TEXT PRIMARY KEY,
+                contract_name TEXT NOT NULL,
+                request_fingerprint TEXT NOT NULL,
+                provider_idempotency_key TEXT,
+                status TEXT NOT NULL,
+                result_json TEXT,
+                provider_operation_id TEXT,
+                error TEXT,
+                attempts INTEGER NOT NULL DEFAULT 0,
+                evidence_json TEXT NOT NULL DEFAULT '{}',
+                owner_token TEXT,
+                lease_until REAL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+            """
+        )
+        connection.execute(
+            """
+            INSERT INTO effect_operations(
+                operation_id, contract_name, request_fingerprint,
+                status, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "legacy-operation",
+                "legacy-contract",
+                "old-fingerprint",
+                EffectStatus.QUARANTINED.value,
+                "2026-01-01T00:00:00+00:00",
+                "2026-01-01T00:00:00+00:00",
+            ),
+        )
+
+    ledger = SQLiteEffectLedger(database)
+    record = ledger.get("legacy-operation")
+
+    assert record is not None
+    assert record.contract_name == "legacy-contract"
+    assert record.contract_version == "1"
+    columns = {
+        row["name"]
+        for row in sqlite3.connect(database).execute("PRAGMA table_info(effect_operations)")
+    }
+    assert "contract_version" in columns
