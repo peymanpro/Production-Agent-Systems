@@ -151,7 +151,12 @@ class EffectLedger(Protocol):
     ) -> bool: ...
 
     def mark_outcome_unknown(
-        self, operation_id: str, error: str, *, owner_token: str | None = None
+        self,
+        operation_id: str,
+        error: str,
+        *,
+        owner_token: str | None = None,
+        evidence: Mapping[str, Any] | None = None,
     ) -> bool: ...
 
     def mark_confirmed(
