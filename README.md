@@ -3,6 +3,7 @@
 Production Agent Systems is a provider-neutral Python library for making agent tool effects safer to execute, recover, and test under failure. It records durable operation state, uses explicit provider contracts to reconcile uncertain outcomes, and includes a deterministic fault-injection testkit for verifying external-effect behavior.
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-3776AB.svg)](https://www.python.org/)
+[![PyPI version](https://img.shields.io/pypi/v/production-agent-systems)](https://pypi.org/project/production-agent-systems/)
 [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![CI](https://github.com/peymanpro/Production-Agent-Systems/actions/workflows/quality.yml/badge.svg?branch=main)](https://github.com/peymanpro/Production-Agent-Systems/actions/workflows/quality.yml)
 [![Latest release](https://img.shields.io/github/v/release/peymanpro/Production-Agent-Systems)](https://github.com/peymanpro/Production-Agent-Systems/releases)
@@ -66,7 +67,7 @@ The effect core integrates with the existing agent runtime: attach an effect con
 
 ## Installation
 
-Install the published package from PyPI:
+Install [production-agent-systems from PyPI](https://pypi.org/project/production-agent-systems/):
 
 ~~~bash
 python -m pip install production-agent-systems
