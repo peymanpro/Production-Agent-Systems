@@ -47,7 +47,7 @@ Production Agent Systems records an operation before dispatch, uses a stable bus
 The current core implementation includes:
 
 - **Explicit effect contracts** — define a stable operation ID, provider idempotency key, optional outcome probe, postcondition, and unknown-outcome policy.
-- **Stable operation identity and request fingerprints** — reject reuse of one operation ID for different request arguments or a different provider key.
+- **Stable operation identity, contract versions, and request fingerprints** — reject reuse of one operation ID for different request arguments, provider keys, or contract versions. Existing SQLite ledgers are migrated to contract version `1`.
 - **Durable SQLite effect ledger** — persist operation state, attempt count, provider result, evidence, and ordered state-change events.
 - **Outcome-aware recovery** — distinguish confirmed success, definitive rejection, active dispatch, unknown outcome, and quarantined operation.
 - **Provider-aware retries** — retry after an authoritative terminal NOT_COMMITTED probe, or use the same key only when provider idempotency is explicitly declared as guaranteed.
