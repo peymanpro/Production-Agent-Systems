@@ -248,8 +248,14 @@ class SQLiteEffectLedger:
             return True
 
     def mark_outcome_unknown(
-        self, operation_id: str, error: str, *, owner_token: str | None = None
+        self,
+        operation_id: str,
+        error: str,
+        *,
+        owner_token: str | None = None,
+        evidence: Mapping[str, Any] | None = None,
     ) -> bool:
+        evidence_updates = dict(evidence or {})
         with self._transaction() as connection:
             row = connection.execute(
                 "SELECT * FROM effect_operations WHERE operation_id = ?",
@@ -268,17 +274,29 @@ class SQLiteEffectLedger:
                 or row["owner_token"] != owner_token
             ):
                 return False
+            existing_evidence = json.loads(row["evidence_json"])
+            merged_evidence = {**existing_evidence, **evidence_updates}
+            evidence_json = _json_dumps(merged_evidence)
             connection.execute(
                 """
                 UPDATE effect_operations
-                SET status = ?, error = ?, owner_token = NULL, lease_until = NULL,
-                    updated_at = ?
+                SET status = ?, error = ?, evidence_json = ?,
+                    owner_token = NULL, lease_until = NULL, updated_at = ?
                 WHERE operation_id = ?
                 """,
-                (EffectStatus.OUTCOME_UNKNOWN.value, error, _utc_now(), operation_id),
+                (
+                    EffectStatus.OUTCOME_UNKNOWN.value,
+                    error,
+                    evidence_json,
+                    _utc_now(),
+                    operation_id,
+                ),
             )
             self._append_event(
-                connection, operation_id, "outcome_unknown", {"error": error}
+                connection,
+                operation_id,
+                "outcome_unknown",
+                {"error": error, "evidence": evidence_updates},
             )
             return True
 
@@ -369,8 +387,7 @@ class SQLiteEffectLedger:
     def mark_quarantined(
         self, operation_id: str, error: str, *, evidence: Mapping[str, Any] | None = None
     ) -> bool:
-        evidence_dict = dict(evidence or {})
-        evidence_json = _json_dumps(evidence_dict)
+        evidence_updates = dict(evidence or {})
         with self._transaction() as connection:
             row = connection.execute(
                 "SELECT * FROM effect_operations WHERE operation_id = ?",
@@ -381,6 +398,9 @@ class SQLiteEffectLedger:
                 EffectStatus.QUARANTINED.value,
             }:
                 return False
+            existing_evidence = json.loads(row["evidence_json"])
+            merged_evidence = {**existing_evidence, **evidence_updates}
+            evidence_json = _json_dumps(merged_evidence)
             connection.execute(
                 """
                 UPDATE effect_operations
@@ -388,18 +408,26 @@ class SQLiteEffectLedger:
                     updated_at = ?
                 WHERE operation_id = ?
                 """,
-                (EffectStatus.QUARANTINED.value, error, evidence_json, _utc_now(), operation_id),
+                (
+                    EffectStatus.QUARANTINED.value,
+                    error,
+                    evidence_json,
+                    _utc_now(),
+                    operation_id,
+                ),
             )
             self._append_event(
-                connection, operation_id, "quarantined", {"error": error, "evidence": evidence_dict}
+                connection,
+                operation_id,
+                "quarantined",
+                {"error": error, "evidence": merged_evidence},
             )
             return True
 
     def reset_for_retry(
         self, operation_id: str, *, evidence: Mapping[str, Any] | None = None
     ) -> bool:
-        evidence_dict = dict(evidence or {})
-        evidence_json = _json_dumps(evidence_dict)
+        evidence_updates = dict(evidence or {})
         with self._transaction() as connection:
             row = connection.execute(
                 "SELECT * FROM effect_operations WHERE operation_id = ?",
@@ -410,6 +438,9 @@ class SQLiteEffectLedger:
                 EffectStatus.QUARANTINED.value,
             }:
                 return False
+            existing_evidence = json.loads(row["evidence_json"])
+            merged_evidence = {**existing_evidence, **evidence_updates}
+            evidence_json = _json_dumps(merged_evidence)
             connection.execute(
                 """
                 UPDATE effect_operations
@@ -425,7 +456,10 @@ class SQLiteEffectLedger:
                 ),
             )
             self._append_event(
-                connection, operation_id, "retry_authorized", {"evidence": evidence_dict}
+                connection,
+                operation_id,
+                "retry_authorized",
+                {"evidence": evidence_updates},
             )
             return True
 
