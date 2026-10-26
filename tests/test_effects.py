@@ -855,6 +855,9 @@ def test_timeout_with_negative_probe_does_not_retry_while_old_handler_may_dispat
     assert first.status is EffectStatus.QUARANTINED
     assert len(handler_calls) == 1
     assert len(committed_effects) == 0
+    quarantined_record = ledger.get(first.operation_id)
+    assert quarantined_record is not None
+    assert quarantined_record.evidence["handler_may_still_be_running"] is True
 
     release_handler.set()
     deadline = monotonic() + 2
@@ -872,4 +875,3 @@ def test_timeout_with_negative_probe_does_not_retry_while_old_handler_may_dispat
     assert recovered.status is EffectStatus.CONFIRMED
     assert len(handler_calls) == 1
     assert len(committed_effects) == 1
-    assert ledger.get(first.operation_id).evidence["handler_may_still_be_running"] is True
