@@ -12,6 +12,13 @@ license = { text = "MIT" }
 authors = [{ name = "Peyman Salimi" }]
 dependencies = []
 
+[project.urls]
+Homepage = "https://github.com/peymanpro/Production-Agent-Systems"
+Repository = "https://github.com/peymanpro/Production-Agent-Systems"
+Issues = "https://github.com/peymanpro/Production-Agent-Systems/issues"
+Changelog = "https://github.com/peymanpro/Production-Agent-Systems/blob/main/CHANGELOG.md"
+Security = "https://github.com/peymanpro/Production-Agent-Systems/blob/main/SECURITY.md"
+
 [project.scripts]
 agent-effect = "production_agent_systems.testkit:main"
 agent-effect-ops = "production_agent_systems.effect_cli:main"
