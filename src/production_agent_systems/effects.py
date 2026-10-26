@@ -54,6 +54,14 @@ class OutcomeProbeResult:
     provider_operation_id: str | None = None
     evidence: Mapping[str, Any] = field(default_factory=dict)
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.status, ProbeStatus):
+            raise ValueError("outcome probe status must be a ProbeStatus value")
+        try:
+            _json_dumps(dict(self.evidence))
+        except (TypeError, ValueError) as exc:
+            raise ValueError("outcome probe evidence must be finite JSON-compatible data") from exc
+
 
 @dataclass(frozen=True)
 class EffectContract:
@@ -74,10 +82,22 @@ class EffectContract:
     version: str = "1"
 
     def __post_init__(self) -> None:
-        if not self.name.strip():
-            raise ValueError("contract name must not be empty")
+        if not isinstance(self.name, str) or not self.name.strip():
+            raise ValueError("contract name must be a non-empty string")
+        if not callable(self.operation_id):
+            raise ValueError("contract operation_id must be callable")
         if not isinstance(self.version, str) or not self.version.strip():
             raise ValueError("contract version must be a non-empty string")
+        if self.provider_idempotency_key is not None and not callable(
+            self.provider_idempotency_key
+        ):
+            raise ValueError("provider_idempotency_key must be callable or None")
+        if self.outcome_probe is not None and not callable(self.outcome_probe):
+            raise ValueError("outcome_probe must be callable or None")
+        if self.postcondition is not None and not callable(self.postcondition):
+            raise ValueError("postcondition must be callable or None")
+        if not isinstance(self.unknown_outcome, UnknownOutcomePolicy):
+            raise ValueError("unknown_outcome must be an UnknownOutcomePolicy value")
         if self.provider_idempotency_guaranteed and self.provider_idempotency_key is None:
             raise ValueError(
                 "provider_idempotency_guaranteed requires provider_idempotency_key"
