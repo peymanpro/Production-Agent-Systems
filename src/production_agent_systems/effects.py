@@ -903,7 +903,7 @@ class EffectExecutor:
                 )
                 reconciled = self._reconcile(
                     contract=contract,
-                    arguments=payload,
+                    arguments=json.loads(canonical),
                     operation_id=operation_id,
                     allow_idempotent_retry=True,
                 )
@@ -933,7 +933,7 @@ class EffectExecutor:
                     )
                     reconciled = self._reconcile(
                         contract=contract,
-                        arguments=payload,
+                        arguments=json.loads(canonical),
                         operation_id=operation_id,
                         allow_idempotent_retry=False,
                     )
@@ -958,7 +958,7 @@ class EffectExecutor:
                 )
                 reconciled = self._reconcile(
                     contract=contract,
-                    arguments=payload,
+                    arguments=json.loads(canonical),
                     operation_id=operation_id,
                     allow_idempotent_retry=False,
                 )
