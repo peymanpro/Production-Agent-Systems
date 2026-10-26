@@ -158,6 +158,27 @@ class EffectLedger(Protocol):
         self, operation_id: str, *, evidence: Mapping[str, Any] | None = None
     ) -> bool: ...
 
+    def list_operations(
+        self, status: EffectStatus | None = None, limit: int = 100
+    ) -> list[EffectRecord]: ...
+
+    def resolve_manually_confirmed(
+        self,
+        operation_id: str,
+        output: Any,
+        *,
+        provider_operation_id: str | None,
+        evidence: Mapping[str, Any],
+    ) -> bool: ...
+
+    def authorize_manual_retry(
+        self, operation_id: str, *, evidence: Mapping[str, Any]
+    ) -> bool: ...
+
+    def resolve_manually_rejected(
+        self, operation_id: str, *, reason: str, evidence: Mapping[str, Any]
+    ) -> bool: ...
+
     def events(self, operation_id: str) -> list[dict[str, Any]]: ...
 
 
@@ -439,6 +460,12 @@ class SQLiteEffectLedger:
                 return False
             if row["status"] == EffectStatus.CONFIRMED.value:
                 return True
+            if row["status"] not in {
+                EffectStatus.DISPATCHED.value,
+                EffectStatus.OUTCOME_UNKNOWN.value,
+                EffectStatus.QUARANTINED.value,
+            }:
+                return False
             if owner_token is not None and row["owner_token"] != owner_token:
                 return False
             connection.execute(
@@ -533,7 +560,6 @@ class SQLiteEffectLedger:
                 (operation_id,),
             ).fetchone()
             if row is None or row["status"] not in {
-                EffectStatus.DISPATCHED.value,
                 EffectStatus.OUTCOME_UNKNOWN.value,
                 EffectStatus.QUARANTINED.value,
             }:
@@ -554,6 +580,146 @@ class SQLiteEffectLedger:
             )
             self._append_event(
                 connection, operation_id, "retry_authorized", {"evidence": evidence_dict}
+            )
+            return True
+
+    def list_operations(
+        self, status: EffectStatus | None = None, limit: int = 100
+    ) -> list[EffectRecord]:
+        if limit < 1 or limit > 1000:
+            raise ValueError("limit must be between 1 and 1000")
+        connection = self._connect()
+        try:
+            if status is None:
+                rows = connection.execute(
+                    "SELECT * FROM effect_operations ORDER BY updated_at DESC LIMIT ?",
+                    (limit,),
+                ).fetchall()
+            else:
+                rows = connection.execute(
+                    """
+                    SELECT * FROM effect_operations
+                    WHERE status = ? ORDER BY updated_at DESC LIMIT ?
+                    """,
+                    (status.value, limit),
+                ).fetchall()
+            records = [self._to_record(row) for row in rows]
+            return [record for record in records if record is not None]
+        finally:
+            connection.close()
+
+    def resolve_manually_confirmed(
+        self,
+        operation_id: str,
+        output: Any,
+        *,
+        provider_operation_id: str | None,
+        evidence: Mapping[str, Any],
+    ) -> bool:
+        result_json = _json_dumps(output)
+        evidence_dict = dict(evidence)
+        evidence_json = _json_dumps(evidence_dict)
+        with self._transaction() as connection:
+            row = connection.execute(
+                "SELECT * FROM effect_operations WHERE operation_id = ?",
+                (operation_id,),
+            ).fetchone()
+            if row is None or row["status"] not in {
+                EffectStatus.OUTCOME_UNKNOWN.value,
+                EffectStatus.QUARANTINED.value,
+            }:
+                return False
+            connection.execute(
+                """
+                UPDATE effect_operations
+                SET status = ?, result_json = ?, provider_operation_id = ?,
+                    evidence_json = ?, error = NULL, owner_token = NULL,
+                    lease_until = NULL, updated_at = ?
+                WHERE operation_id = ?
+                """,
+                (
+                    EffectStatus.CONFIRMED.value,
+                    result_json,
+                    provider_operation_id,
+                    evidence_json,
+                    _utc_now(),
+                    operation_id,
+                ),
+            )
+            self._append_event(
+                connection,
+                operation_id,
+                "manually_confirmed",
+                {
+                    "provider_operation_id": provider_operation_id,
+                    "evidence": evidence_dict,
+                },
+            )
+            return True
+
+    def authorize_manual_retry(
+        self, operation_id: str, *, evidence: Mapping[str, Any]
+    ) -> bool:
+        evidence_dict = dict(evidence)
+        evidence_json = _json_dumps(evidence_dict)
+        with self._transaction() as connection:
+            row = connection.execute(
+                "SELECT * FROM effect_operations WHERE operation_id = ?",
+                (operation_id,),
+            ).fetchone()
+            if row is None or row["status"] not in {
+                EffectStatus.OUTCOME_UNKNOWN.value,
+                EffectStatus.QUARANTINED.value,
+            }:
+                return False
+            connection.execute(
+                """
+                UPDATE effect_operations
+                SET status = ?, error = NULL, evidence_json = ?, owner_token = NULL,
+                    lease_until = NULL, updated_at = ?
+                WHERE operation_id = ?
+                """,
+                (
+                    EffectStatus.PREPARED.value,
+                    evidence_json,
+                    _utc_now(),
+                    operation_id,
+                ),
+            )
+            self._append_event(
+                connection, operation_id, "manual_retry_authorized", {"evidence": evidence_dict}
+            )
+            return True
+
+    def resolve_manually_rejected(
+        self, operation_id: str, *, reason: str, evidence: Mapping[str, Any]
+    ) -> bool:
+        evidence_dict = dict(evidence)
+        evidence_json = _json_dumps(evidence_dict)
+        with self._transaction() as connection:
+            row = connection.execute(
+                "SELECT * FROM effect_operations WHERE operation_id = ?",
+                (operation_id,),
+            ).fetchone()
+            if row is None or row["status"] not in {
+                EffectStatus.OUTCOME_UNKNOWN.value,
+                EffectStatus.QUARANTINED.value,
+            }:
+                return False
+            connection.execute(
+                """
+                UPDATE effect_operations
+                SET status = ?, error = ?, evidence_json = ?, owner_token = NULL,
+                    lease_until = NULL, updated_at = ?
+                WHERE operation_id = ?
+                """,
+                (EffectStatus.REJECTED.value, reason, evidence_json, _utc_now(), operation_id),
+            )
+            self._append_event(
+                connection,
+                operation_id,
+                "manually_rejected",
+                {"reason": reason, "evidence": evidence_dict},
             )
             return True
 
@@ -912,6 +1078,90 @@ class EffectExecutor:
         current = self.ledger.get(operation_id)
         assert current is not None
         return self._result(current)
+
+    def list_operations(
+        self, status: EffectStatus | None = None, limit: int = 100
+    ) -> list[EffectRecord]:
+        return self.ledger.list_operations(status=status, limit=limit)
+
+    @staticmethod
+    def _validate_manual_resolution(actor: str, reason: str, evidence_reference: str) -> dict[str, str]:
+        values = {
+            "actor": actor,
+            "reason": reason,
+            "evidence_reference": evidence_reference,
+        }
+        if any(not isinstance(value, str) or not value.strip() for value in values.values()):
+            raise ValueError("actor, reason, and evidence_reference must be non-empty strings")
+        return values
+
+    def resolve_manually_confirmed(
+        self,
+        operation_id: str,
+        output: Any,
+        *,
+        actor: str,
+        reason: str,
+        evidence_reference: str,
+        provider_operation_id: str | None = None,
+    ) -> EffectResult:
+        """Resolve an uncertain operation after trusted, independent confirmation."""
+        evidence = self._validate_manual_resolution(actor, reason, evidence_reference)
+        evidence["resolution"] = "manual_confirmation"
+        if not self.ledger.resolve_manually_confirmed(
+            operation_id,
+            output,
+            provider_operation_id=provider_operation_id,
+            evidence=evidence,
+        ):
+            raise EffectError(
+                "manual confirmation is allowed only for an existing unknown or quarantined operation"
+            )
+        record = self.ledger.get(operation_id)
+        assert record is not None
+        return self._result(record, duplicate_suppressed=True)
+
+    def authorize_manual_retry(
+        self,
+        operation_id: str,
+        *,
+        actor: str,
+        reason: str,
+        evidence_reference: str,
+    ) -> EffectRecord:
+        """Authorize retry only after a trusted operator establishes terminal non-execution."""
+        evidence = self._validate_manual_resolution(actor, reason, evidence_reference)
+        evidence["resolution"] = "manual_retry_authorization"
+        if not self.ledger.authorize_manual_retry(operation_id, evidence=evidence):
+            raise EffectError(
+                "manual retry is allowed only for an existing unknown or quarantined operation"
+            )
+        record = self.ledger.get(operation_id)
+        assert record is not None
+        return record
+
+    def resolve_manually_rejected(
+        self,
+        operation_id: str,
+        *,
+        actor: str,
+        reason: str,
+        evidence_reference: str,
+    ) -> EffectResult:
+        """Record trusted evidence that an uncertain operation did not take effect."""
+        evidence = self._validate_manual_resolution(actor, reason, evidence_reference)
+        evidence["resolution"] = "manual_rejection"
+        if not self.ledger.resolve_manually_rejected(
+            operation_id,
+            reason=reason,
+            evidence=evidence,
+        ):
+            raise EffectError(
+                "manual rejection is allowed only for an existing unknown or quarantined operation"
+            )
+        record = self.ledger.get(operation_id)
+        assert record is not None
+        return self._result(record)
 
     @staticmethod
     def _result(
