@@ -8,7 +8,6 @@ from pathlib import Path
 from typing import Any, Iterator, Mapping
 
 from .effect_models import (
-    EffectLedger,
     EffectRecord,
     EffectStatus,
     OperationConflictError,
