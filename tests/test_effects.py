@@ -188,3 +188,70 @@ def test_cli_scenarios_assert_one_effect(scenario):
     assert report["confirmed"] is True
     assert report["committed_effect_count"] == 1
     assert report["duplicate_effect_detected"] is False
+
+def test_provider_idempotency_key_allows_safe_replay_without_probe(tmp_path):
+    provider = FaultInjectingPaymentProvider(
+        fault_point=FaultPoint.AFTER_COMMIT_BEFORE_ACK
+    )
+    base = payment_contract(provider)
+    contract = EffectContract(
+        name=base.name,
+        operation_id=base.operation_id,
+        provider_idempotency_key=base.provider_idempotency_key,
+        provider_idempotency_guaranteed=True,
+    )
+    result = EffectExecutor(
+        ledger=SQLiteEffectLedger(tmp_path / "effects.sqlite3")
+    ).execute(
+        contract=contract,
+        arguments={"invoice_id": "INV-400"},
+        handler=provider.capture,
+    )
+
+    assert result.status is EffectStatus.CONFIRMED
+    assert result.attempts == 2
+    assert len(provider.committed_effects) == 1
+
+
+def test_active_dispatch_lease_prevents_a_competing_handler(tmp_path):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Event
+
+    entered = Event()
+    release = Event()
+    calls: list[str] = []
+
+    def handler(arguments, *, idempotency_key):
+        calls.append(arguments["resource_id"])
+        entered.set()
+        assert release.wait(timeout=3)
+        return {"resource_id": arguments["resource_id"], "created": True}
+
+    contract = EffectContract(
+        name="create_resource",
+        operation_id=lambda args: f"resource:{args['resource_id']}:create:v1",
+    )
+    ledger = SQLiteEffectLedger(tmp_path / "effects.sqlite3")
+    executor = EffectExecutor(ledger=ledger, lease_seconds=10)
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        first_future = pool.submit(
+            executor.execute,
+            contract=contract,
+            arguments={"resource_id": "R-10"},
+            handler=handler,
+        )
+        assert entered.wait(timeout=2)
+        second = executor.execute(
+            contract=contract,
+            arguments={"resource_id": "R-10"},
+            handler=handler,
+        )
+        assert second.status is EffectStatus.DISPATCHED
+        assert second.in_progress is True
+        assert len(calls) == 1
+        release.set()
+        first = first_future.result(timeout=3)
+
+    assert first.status is EffectStatus.CONFIRMED
+    assert len(calls) == 1
