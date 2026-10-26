@@ -113,7 +113,7 @@ def find_payment_outcome(arguments, *, idempotency_key):
 
 contract = EffectContract(
     name="capture_payment",
-    operation_id=lambda args: f"invoice:{args['invoice_id']}:capture:v1",
+    operation_id=lambda args: f"invoice:{args['invoice_id']}:capture",
     provider_idempotency_key=lambda args: f"capture:{args['invoice_id']}",
     provider_idempotency_guaranteed=True,
     outcome_probe=find_payment_outcome,
@@ -220,13 +220,13 @@ Inspect an existing ledger and its quarantined operations:
 
 ~~~bash
 agent-effect-ops --db agent-effects.sqlite3 list --status quarantined
-agent-effect-ops --db agent-effects.sqlite3 events invoice:INV-1042:capture:v1
+agent-effect-ops --db agent-effects.sqlite3 events invoice:INV-1042:capture
 ~~~
 
 After independently verifying the provider outcome, record a manual resolution with an auditable operator identity and evidence reference:
 
 ~~~bash
-agent-effect-ops --db agent-effects.sqlite3 confirm invoice:INV-1042:capture:v1 \
+agent-effect-ops --db agent-effects.sqlite3 confirm invoice:INV-1042:capture \
   --output-json '{"payment_id":"pay-123","status":"captured"}' \
   --provider-operation-id pay-123 \
   --actor on-call-operator \
@@ -234,7 +234,7 @@ agent-effect-ops --db agent-effects.sqlite3 confirm invoice:INV-1042:capture:v1 
   --evidence-reference INC-1042/provider-event-123
 
 # Only after establishing terminal non-execution:
-agent-effect-ops --db agent-effects.sqlite3 authorize-retry invoice:INV-1042:capture:v1 \
+agent-effect-ops --db agent-effects.sqlite3 authorize-retry invoice:INV-1042:capture \
   --actor on-call-operator \
   --reason "Provider confirms request cannot still commit" \
   --evidence-reference INC-1042/provider-terminal-query
