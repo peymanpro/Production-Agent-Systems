@@ -10,6 +10,7 @@ An operation ID represents one business intent, not one attempt. Derive it from 
 contract = EffectContract(
     name="capture_payment",
     operation_id=lambda args: f"invoice:{args['invoice_id']}:capture:v1",
+    version="1",
     provider_idempotency_key=lambda args: f"capture:{args['invoice_id']}",
     provider_idempotency_guaranteed=True,
     outcome_probe=lookup_payment,
