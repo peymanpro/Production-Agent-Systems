@@ -57,7 +57,7 @@ The current core implementation includes:
 - **Fault-injection demo** — reproduce failure before commit and commit followed by a lost acknowledgement, then report the number of committed fake effects.
 - **No model-provider dependency** — the core tests and demo run without API keys or hosted model calls.
 
-The existing agent runtime, tools, permissions, checkpointing, events, and trace utilities remain in the package. The effect executor is currently a separate public boundary; automatic routing of every existing AgentRuntime tool through an effect contract is a follow-up integration task.
+The effect core integrates with the existing agent runtime: attach an effect contract to a ToolDefinition and supply an EffectExecutor to AgentRuntime. An uncertain or quarantined effect transitions the run to WAITING, so the same logical action can be reconciled on resume rather than being reported as a definitive failure. The existing permission policy still runs before the tool handler.
 
 ## Installation
 
@@ -198,7 +198,7 @@ A handler can raise **EffectRejected** only when it has reliable evidence that t
 - **Conflicting operation ID:** raise OperationConflictError before another external dispatch.
 - **Result that cannot be stored as JSON:** preserve an unknown outcome rather than claiming a durable replay result that was not stored.
 
-The ledger's transitions are inspectable through **SQLiteEffectLedger.events(operation_id)**.
+The ledger's transitions are inspectable through **SQLiteEffectLedger.events(operation_id)**. See [Effect Contracts and Recovery](docs/effect-contracts.md) for state semantics and runtime configuration.
 
 ## Fault-injection testkit
 
@@ -236,7 +236,7 @@ SQLiteEffectLedger stores operation records and their event history in a file-ba
 
 SQLite is intended for local and single-host workflows. A durable SQLite database does not make an external provider transactional, and it is not a substitute for a shared coordination backend in a multi-host deployment. A PostgreSQL ledger and its cross-host concurrency contract are not included in the current implementation.
 
-Lease expiry also does not prove that a slow handler or remote request stopped. After expiry, the executor must reconcile the provider outcome; it must not infer that retry is safe from lease expiry alone.
+Lease expiry also does not prove that a slow handler or remote request stopped. The effect executor can bound how long it waits for a handler, but a running Python thread cannot be forcibly terminated. Provider-native network timeouts are still required. After an uncertain timeout or lease expiry, the executor must reconcile the provider outcome; it must not infer that retry is safe from a timeout alone.
 
 ## Security model and limits
 
@@ -293,13 +293,13 @@ The default tests must never contact production payment, messaging, or infrastru
 
 ## Current scope and next steps
 
-The current branch implements the standalone effect contract, SQLite ledger, recovery policy, public API, and deterministic fault-injection demo. The next engineering steps are:
+The current branch implements the standalone effect contract, SQLite ledger, effect-aware AgentRuntime integration, public API, and deterministic fault-injection demo. The next engineering steps are:
 
-1. Integrate effect contracts into AgentRuntime so configured mutating tools automatically use the effect ledger rather than bypassing it.
-2. Add process-level crash tests and more concurrency tests against the real SQLite implementation.
-3. Add and validate a PostgreSQL ledger before claiming cross-host coordination.
-4. Build framework adapters only after the standalone contract is stable.
-5. Expand the fault matrix and compare results against a baseline using the same committed-effect ledger.
+1. Add process-level crash tests and extend concurrency testing against independent SQLite ledger instances.
+2. Add and validate a PostgreSQL ledger before claiming cross-host coordination.
+3. Build framework adapters only after the contract and recovery state machine are stable.
+4. Expand the fault matrix and compare results against a baseline using the same independently counted committed-effect ledger.
+5. Add operator-facing inspection and resolution APIs for quarantined operations, with an explicit evidence trail.
 
 These items are not claimed as completed until implementation, tests, and documentation all agree.
 
