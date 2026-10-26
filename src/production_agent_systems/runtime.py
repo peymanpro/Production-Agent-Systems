@@ -5,6 +5,7 @@ from time import sleep
 from typing import Callable
 
 from .audit import AuditRecord, AuditSink
+from .effects import EffectExecutor
 from .events import Event, EventSink, EventType
 from .models import (
     ActionKind,
@@ -55,6 +56,7 @@ class AgentRuntime:
         event_sink: EventSink,
         audit_sink: AuditSink | None = None,
         circuit_breaker: CircuitBreaker | None = None,
+        effect_executor: EffectExecutor | None = None,
         config: RuntimeConfig | None = None,
         sleep_fn: Callable[[float], None] = sleep,
     ) -> None:
@@ -66,7 +68,7 @@ class AgentRuntime:
         self.event_sink = event_sink
         self.audit_sink = audit_sink
         self.circuit_breaker = circuit_breaker or CircuitBreaker()
-        self.tool_executor = ToolExecutor(registry)
+        self.tool_executor = ToolExecutor(registry, effect_executor=effect_executor)
         self.config = config or RuntimeConfig()
         self.sleep_fn = sleep_fn
 
@@ -265,6 +267,9 @@ class AgentRuntime:
                     "error": result.error,
                     "attempts": result.attempts,
                     "duplicate_suppressed": result.duplicate_suppressed,
+                    "effect_status": result.effect_status,
+                    "operation_id": result.operation_id,
+                    "in_progress": result.in_progress,
                 },
             )
             state.observations.append(
@@ -287,7 +292,18 @@ class AgentRuntime:
                     },
                 )
                 state.failure_reason = result.error or "tool execution failed"
-                self._transition(state, RunStatus.FAILED, state.failure_reason)
+                waiting_effect_states = {
+                    "prepared",
+                    "dispatched",
+                    "outcome_unknown",
+                    "quarantined",
+                }
+                next_status = (
+                    RunStatus.WAITING
+                    if result.effect_status in waiting_effect_states
+                    else RunStatus.FAILED
+                )
+                self._transition(state, next_status, state.failure_reason)
                 self._emit(
                     state,
                     EventType.TERMINATION,
@@ -346,7 +362,11 @@ class AgentRuntime:
                 success=result.success,
                 output=result.output,
                 error=result.error,
-                attempts=attempt,
+                attempts=result.attempts if result.effect_status is not None else attempt,
+                duplicate_suppressed=result.duplicate_suppressed,
+                effect_status=result.effect_status,
+                operation_id=result.operation_id,
+                in_progress=result.in_progress,
             )
 
             if result.success:
@@ -355,6 +375,11 @@ class AgentRuntime:
 
             if result.error and result.error.startswith("invalid_tool_input:"):
                 # Caller errors must fail the run without poisoning dependency health.
+                return last
+
+            if result.effect_status is not None:
+                # The effect executor owns retry and reconciliation decisions.
+                # An uncertain external outcome is not proof that the dependency failed.
                 return last
 
             circuit_opened = self.circuit_breaker.record_failure(name)
