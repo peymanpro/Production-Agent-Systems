@@ -88,6 +88,9 @@ class ToolResult:
     error: str | None = None
     attempts: int = 1
     duplicate_suppressed: bool = False
+    effect_status: str | None = None
+    operation_id: str | None = None
+    in_progress: bool = False
 
 
 @dataclass(frozen=True)
@@ -128,6 +131,9 @@ class AgentState:
                         "error": item.result.error,
                         "attempts": item.result.attempts,
                         "duplicate_suppressed": item.result.duplicate_suppressed,
+                        "effect_status": item.result.effect_status,
+                        "operation_id": item.result.operation_id,
+                        "in_progress": item.result.in_progress,
                     },
                 }
                 for item in self.observations
@@ -141,6 +147,9 @@ class AgentState:
                     "error": value.error,
                     "attempts": value.attempts,
                     "duplicate_suppressed": value.duplicate_suppressed,
+                    "effect_status": value.effect_status,
+                    "operation_id": value.operation_id,
+                    "in_progress": value.in_progress,
                 }
                 for key, value in self.idempotency_results.items()
             },
@@ -171,6 +180,9 @@ class AgentState:
                 error=raw.get("error"),
                 attempts=raw.get("attempts", 1),
                 duplicate_suppressed=raw.get("duplicate_suppressed", False),
+                effect_status=raw.get("effect_status"),
+                operation_id=raw.get("operation_id"),
+                in_progress=raw.get("in_progress", False),
             )
         for item in snapshot.get("observations", []):
             raw = item["result"]
@@ -184,6 +196,9 @@ class AgentState:
                         error=raw.get("error"),
                         attempts=raw.get("attempts", 1),
                         duplicate_suppressed=raw.get("duplicate_suppressed", False),
+                        effect_status=raw.get("effect_status"),
+                        operation_id=raw.get("operation_id"),
+                        in_progress=raw.get("in_progress", False),
                     ),
                 )
             )
