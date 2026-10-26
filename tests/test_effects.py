@@ -475,6 +475,7 @@ def test_manual_retry_requires_explicit_evidence_and_only_retries_uncertain_reco
         evidence_reference="INC-2048/provider-query-2",
     )
     assert prepared.status is EffectStatus.PREPARED
+    assert prepared.evidence["handler_may_still_be_running"] is False
 
     second = executor.execute(contract=contract, arguments=arguments, handler=handler)
     assert second.status is EffectStatus.CONFIRMED
