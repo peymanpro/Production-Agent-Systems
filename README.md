@@ -66,7 +66,13 @@ The effect core integrates with the existing agent runtime: attach an effect con
 
 ## Installation
 
-Install from a source checkout:
+Install the published package from PyPI:
+
+~~~bash
+python -m pip install production-agent-systems
+~~~
+
+For development from a source checkout, install the project and its development tools:
 
 ~~~bash
 python -m pip install -e ".[dev]"

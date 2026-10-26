@@ -3,7 +3,6 @@ name: Release
 on:
   push:
     branches: [main]
-    tags: ["v*"]
   workflow_dispatch:
     inputs:
       version:
@@ -11,8 +10,7 @@ on:
         required: false
         type: string
 
-permissions:
-  contents: write
+permissions: {}
 
 concurrency:
   group: release-${{ github.ref }}
@@ -20,8 +18,14 @@ concurrency:
 
 jobs:
   release:
-    name: Validate, build, and publish
+    name: Validate, build, and create GitHub Release
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      skip: ${{ steps.version.outputs.skip }}
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
     steps:
       - name: Check out source
         uses: actions/checkout@v4
@@ -89,6 +93,14 @@ jobs:
           python -m pip install build
           python -m build
 
+      - name: Upload distributions for PyPI publishing
+        if: steps.version.outputs.skip != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-distributions
+          path: dist/
+          if-no-files-found: error
+
       - name: Publish GitHub Release if not already published
         if: steps.version.outputs.skip != 'true'
         shell: bash
@@ -111,3 +123,23 @@ jobs:
             gh release create "$RELEASE_TAG" dist/* --target "$TARGET_SHA" --repo "$GH_REPO" \
               --title "Production Agent Systems $RELEASE_TAG" --generate-notes
           fi
+
+  publish-to-pypi:
+    name: Publish distributions to PyPI
+    needs: release
+    if: needs.release.outputs.skip != 'true'
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/project/production-agent-systems/
+    permissions:
+      id-token: write
+    steps:
+      - name: Download distributions
+        uses: actions/download-artifact@v4
+        with:
+          name: python-distributions
+          path: dist/
+
+      - name: Publish to PyPI using Trusted Publishing
+        uses: pypa/gh-action-pypi-publish@release/v1
