@@ -9,7 +9,7 @@ An operation ID represents one business intent, not one attempt. Derive it from 
 ```python
 contract = EffectContract(
     name="capture_payment",
-    operation_id=lambda args: f"invoice:{args['invoice_id']}:capture:v1",
+    operation_id=lambda args: f"invoice:{args['invoice_id']}:capture",
     version="1",
     provider_idempotency_key=lambda args: f"capture:{args['invoice_id']}",
     provider_idempotency_guaranteed=True,
@@ -128,8 +128,8 @@ The `agent-effect-ops` command exposes the same operations for a local SQLite le
 
 ~~~bash
 agent-effect-ops --db agent-effects.sqlite3 list --status quarantined
-agent-effect-ops --db agent-effects.sqlite3 events "invoice:INV-1042:capture:v1"
-agent-effect-ops --db agent-effects.sqlite3 confirm "invoice:INV-1042:capture:v1" \
+agent-effect-ops --db agent-effects.sqlite3 events "invoice:INV-1042:capture"
+agent-effect-ops --db agent-effects.sqlite3 confirm "invoice:INV-1042:capture" \
   --output-json '{"payment_id":"pay-123","status":"captured"}' \
   --actor on-call-operator \
   --reason "Verified provider capture record" \
