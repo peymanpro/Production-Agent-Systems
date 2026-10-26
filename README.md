@@ -199,7 +199,7 @@ A handler can raise **EffectRejected** only when it has reliable evidence that t
 - **Conflicting operation ID:** raise OperationConflictError before another external dispatch.
 - **Result that cannot be stored as JSON:** preserve an unknown outcome rather than claiming a durable replay result that was not stored.
 
-Operations can be inspected with **SQLiteEffectLedger.list_operations(status=EffectStatus.QUARANTINED)**; transitions are available through **SQLiteEffectLedger.events(operation_id)**. For a quarantined operation, **EffectExecutor** also exposes auditable manual confirmation, rejection, and retry authorization methods. Those methods record an actor, reason, and evidence reference but do not authenticate the actor; the integrating application must enforce operator authorization. See [Effect Contracts and Recovery](docs/effect-contracts.md).
+Operations can be inspected with **SQLiteEffectLedger.list_operations(status=EffectStatus.QUARANTINED)**; transitions are available through **SQLiteEffectLedger.events(operation_id)**. The separate `agent-effect-ops` CLI can list operation summaries, inspect event history, and record auditable manual confirmation, rejection, or retry authorization. These operations require an actor, reason, and evidence reference, but the CLI does not authenticate the actor; restrict access to the ledger and enforce operator authorization at the environment boundary. See [Effect Contracts and Recovery](docs/effect-contracts.md).
 
 ## Fault-injection testkit
 
@@ -214,6 +214,30 @@ agent-effect --scenario before-commit
 
 # Save the JSON report as a CI artifact.
 agent-effect --scenario after-commit-before-ack --output artifacts/effect-report.json
+~~~
+
+Inspect an existing ledger and its quarantined operations:
+
+~~~bash
+agent-effect-ops --db agent-effects.sqlite3 list --status quarantined
+agent-effect-ops --db agent-effects.sqlite3 events invoice:INV-1042:capture:v1
+~~~
+
+After independently verifying the provider outcome, record a manual resolution with an auditable operator identity and evidence reference:
+
+~~~bash
+agent-effect-ops --db agent-effects.sqlite3 confirm invoice:INV-1042:capture:v1 \
+  --output-json '{"payment_id":"pay-123","status":"captured"}' \
+  --provider-operation-id pay-123 \
+  --actor on-call-operator \
+  --reason "Verified provider capture record" \
+  --evidence-reference INC-1042/provider-event-123
+
+# Only after establishing terminal non-execution:
+agent-effect-ops --db agent-effects.sqlite3 authorize-retry invoice:INV-1042:capture:v1 \
+  --actor on-call-operator \
+  --reason "Provider confirms request cannot still commit" \
+  --evidence-reference INC-1042/provider-terminal-query
 ~~~
 
 The JSON report includes the scenario, operation ID, final status, attempt count, committed-effect count, duplicate detection, and event types. The built-in fake provider is deterministic and does not call a real payment service.
