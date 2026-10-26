@@ -243,6 +243,8 @@ class ToolExecutor:
             )
 
         if tool.effect_contract is not None:
+            # Use the effect ledger's timeout path, not a generic wrapper that could
+            # return "timeout" while concealing the status of an external mutation.
             if self.effect_executor is None:
                 raise RuntimeError(
                     f"tool {name!r} declares an effect contract but no EffectExecutor was configured"
@@ -252,6 +254,7 @@ class ToolExecutor:
                     contract=tool.effect_contract,
                     arguments=arguments,
                     handler=tool.handler,
+                    handler_timeout_seconds=timeout_seconds,
                 )
             except OperationConflictError:
                 return ToolResult(
