@@ -507,7 +507,7 @@ class EffectExecutor:
         return self.ledger.list_operations(status=status, limit=limit)
 
     @staticmethod
-    def _validate_manual_resolution(actor: str, reason: str, evidence_reference: str) -> dict[str, str]:
+    def _validate_manual_resolution(actor: str, reason: str, evidence_reference: str) -> dict[str, Any]:
         values = {
             "actor": actor,
             "reason": reason,
