@@ -324,7 +324,7 @@ The default tests must never contact production payment, messaging, or infrastru
 
 The current branch implements the standalone effect contract, SQLite ledger, effect-aware AgentRuntime integration, public API, and deterministic fault-injection demo. The next engineering steps are:
 
-1. Add process-level crash tests and extend concurrency testing against independent SQLite ledger instances.
+1. Expand process-level crash-recovery coverage and concurrency testing across independent SQLite ledger instances; the first subprocess crash/recovery regression is now included.
 2. Add and validate a PostgreSQL ledger before claiming cross-host coordination.
 3. Build framework adapters only after the contract and recovery state machine are stable.
 4. Expand the fault matrix and compare results against a baseline using the same independently counted committed-effect ledger.
