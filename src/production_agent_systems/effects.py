@@ -813,6 +813,12 @@ class EffectExecutor:
                 )
                 record = self.ledger.get(operation_id)
                 assert record is not None
+                if (
+                    record.status is EffectStatus.DISPATCHED
+                    and record.lease_until is not None
+                    and record.lease_until > time.time()
+                ):
+                    return self._result(record, in_progress=True)
 
             if record.status in {EffectStatus.OUTCOME_UNKNOWN, EffectStatus.QUARANTINED}:
                 reconciled = self._reconcile(
@@ -826,6 +832,12 @@ class EffectExecutor:
                 record = self.ledger.get(operation_id)
                 assert record is not None
 
+            if (
+                record.status is EffectStatus.DISPATCHED
+                and record.lease_until is not None
+                and record.lease_until > time.time()
+            ):
+                return self._result(record, in_progress=True)
             if record.status is not EffectStatus.PREPARED:
                 return self._result(record)
 
