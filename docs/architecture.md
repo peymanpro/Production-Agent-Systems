@@ -48,7 +48,7 @@ The planner proposes an action. The runtime checks permissions and validates the
 
 An operation ID identifies one business operation, not one attempt. The request fingerprint prevents the same ID from being reused with different arguments, and the contract version prevents a recorded result from being reused under changed execution semantics.
 
-The local ledger and an external provider do not share a transaction. If a provider commits but the acknowledgement is lost, the ledger must represent uncertainty until the provider contract or trusted reconciliation establishes an outcome. A lease expiration only means the local claim expired; it does not prove that a remote request stopped.
+The local ledger and an external provider do not share a transaction. If a provider commits but the acknowledgement is lost, the ledger must represent uncertainty until the provider contract or trusted reconciliation establishes an outcome. A lease expiration only means the local claim expired; it does not prove that a remote request stopped. A timed-out Python thread may still be capable of sending the request, so a negative provider probe alone cannot authorize an overlapping retry when provider idempotency is unavailable.
 
 A repeated external call is eligible only when one of these conditions establishes safety:
 
