@@ -54,7 +54,7 @@ The current core implementation includes:
 - **Stable operation identity, contract versions, and request fingerprints** — reject reuse of one operation ID for different request arguments, provider keys, or contract versions. Existing SQLite ledgers are migrated to contract version `1`.
 - **Durable SQLite effect ledger** — persist operation state, attempt count, provider result, evidence, and ordered state-change events.
 - **Outcome-aware recovery** — distinguish confirmed success, definitive rejection, active dispatch, unknown outcome, and quarantined operation.
-- **Provider-aware retries** — retry after an authoritative terminal NOT_COMMITTED probe, or use the same key only when provider idempotency is explicitly declared as guaranteed.
+- **Provider-aware retries** — retry after terminal NOT_COMMITTED evidence only when no earlier local handler can still dispatch; an overlapping retry requires an explicitly declared provider idempotency guarantee.
 - **Conservative ambiguity handling** — quarantine uncertain writes by default when neither a reliable outcome probe nor a provider idempotency guarantee can make retry safe.
 - **Postcondition validation** — require a caller-defined condition before treating a returned or probed result as confirmed.
 - **Operation conflict detection** — detect request-fingerprint mismatches before another handler dispatch.
