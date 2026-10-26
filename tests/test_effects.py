@@ -652,3 +652,72 @@ def test_sqlite_ledger_migrates_legacy_rows_to_contract_version_one(tmp_path):
         for row in sqlite3.connect(database).execute("PRAGMA table_info(effect_operations)")
     }
     assert "contract_version" in columns
+
+def test_handler_mutation_does_not_change_reconciliation_arguments(tmp_path):
+    observed_probe_ids: list[str] = []
+
+    def handler(arguments, *, idempotency_key):
+        arguments["resource"]["id"] = "MUTATED-BY-HANDLER"
+        raise TimeoutError("acknowledgement lost after remote commit")
+
+    def probe(arguments, *, idempotency_key):
+        resource_id = arguments["resource"]["id"]
+        observed_probe_ids.append(resource_id)
+        if resource_id == "R-ORIGINAL":
+            return OutcomeProbeResult(
+                status=ProbeStatus.COMMITTED,
+                output={"resource_id": resource_id, "created": True},
+                evidence={"source": "fake provider"},
+            )
+        return OutcomeProbeResult(
+            status=ProbeStatus.UNKNOWN,
+            evidence={"observed_resource_id": resource_id},
+        )
+
+    contract = EffectContract(
+        name="create_resource",
+        operation_id=lambda args: f"resource:{args['resource']['id']}:create:v1",
+        outcome_probe=probe,
+    )
+    result = EffectExecutor(
+        ledger=SQLiteEffectLedger(tmp_path / "effects.sqlite3")
+    ).execute(
+        contract=contract,
+        arguments={"resource": {"id": "R-ORIGINAL"}},
+        handler=handler,
+    )
+
+    assert result.status is EffectStatus.CONFIRMED
+    assert observed_probe_ids == ["R-ORIGINAL"]
+
+
+def test_operation_id_callback_cannot_mutate_arguments_for_provider_key(tmp_path):
+    seen_provider_inputs: list[str] = []
+
+    def operation_id(arguments):
+        arguments["invoice_id"] = "MUTATED"
+        return "invoice:INV-IMMUTABLE:capture:v1"
+
+    def provider_key(arguments):
+        seen_provider_inputs.append(arguments["invoice_id"])
+        return f"capture:{arguments['invoice_id']}"
+
+    contract = EffectContract(
+        name="capture_payment",
+        operation_id=operation_id,
+        provider_idempotency_key=provider_key,
+    )
+    result = EffectExecutor(
+        ledger=SQLiteEffectLedger(tmp_path / "effects.sqlite3")
+    ).execute(
+        contract=contract,
+        arguments={"invoice_id": "INV-IMMUTABLE"},
+        handler=lambda arguments, *, idempotency_key: {
+            "invoice_id": arguments["invoice_id"],
+            "idempotency_key": idempotency_key,
+        },
+    )
+
+    assert result.status is EffectStatus.CONFIRMED
+    assert seen_provider_inputs == ["INV-IMMUTABLE"]
+    assert result.output["invoice_id"] == "INV-IMMUTABLE"
