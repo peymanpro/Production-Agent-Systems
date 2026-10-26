@@ -23,7 +23,7 @@ The library focuses on the boundary between **what an agent believes happened** 
 - [Security model and limits](#security-model-and-limits)
 - [Research behind the design](#research-behind-the-design)
 - [Development](#development)
-- [Current scope and next steps](#current-scope-and-next-steps)
+- [V1 scope and optional future extensions](#v1-scope-and-optional-future-extensions)
 - [Changelog](CHANGELOG.md)
 - [Security policy](SECURITY.md)
 - [License](#license)
@@ -320,17 +320,19 @@ agent-effect --scenario before-commit
 
 The default tests must never contact production payment, messaging, or infrastructure services.
 
-## Current scope and next steps
+## V1 scope and optional future extensions
 
-The current branch implements the standalone effect contract, SQLite ledger, effect-aware AgentRuntime integration, public API, and deterministic fault-injection demo. The next engineering steps are:
+**The single-host V1 scope is implemented.** It includes the standalone effect contract, versioned operation identity, file-backed SQLite ledger, effect-aware AgentRuntime integration, provider-aware recovery, operator inspection and manual-resolution CLI, deterministic fault injection, an end-to-end lost-acknowledgement example, and a subprocess crash-recovery regression test. The quality workflow passes tests, Ruff, and mypy on `main`.
 
-1. Expand process-level crash-recovery coverage and concurrency testing across independent SQLite ledger instances; the first subprocess crash/recovery regression is now included.
-2. Add and validate a PostgreSQL ledger before claiming cross-host coordination.
-3. Build framework adapters only after the contract and recovery state machine are stable.
-4. Expand the fault matrix and compare results against a baseline using the same independently counted committed-effect ledger.
-5. Add an operator-facing CLI for inspecting and resolving quarantined operations; the current resolution methods are available as a Python API.
+The implementation deliberately makes bounded guarantees rather than claiming universal exactly-once execution. Use this version for a single-host application when its provider contract offers an appropriate idempotency guarantee or outcome probe, and treat unresolved outcomes as operational incidents requiring reconciliation.
 
-These items are not claimed as completed until implementation, tests, and documentation all agree. See [CHANGELOG.md](CHANGELOG.md) for the current development scope and [SECURITY.md](SECURITY.md) for vulnerability disclosure and security boundaries.
+The following are deployment-specific extensions, not prerequisites for the implemented single-host V1:
+
+- **PostgreSQL ledger:** needed before claiming shared multi-host coordination.
+- **Framework adapters:** useful when a project needs first-class integration beyond the generic `ToolDefinition` and `AgentRuntime` boundary.
+- **Additional fault matrices and benchmarking:** useful for validating a particular provider integration against its own baseline.
+
+Generic agent checkpoints, trace, and audit sinks remain in-memory reference implementations. The durable effect ledger is SQLite-only; the local operations CLI records operator-supplied identity and evidence but does not authenticate the operator. These boundaries are intentional and documented in [docs/security-boundaries.md](docs/security-boundaries.md) and [SECURITY.md](SECURITY.md).
 
 ## License
 
