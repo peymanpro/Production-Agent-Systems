@@ -14,6 +14,7 @@ Notable changes to Production Agent Systems are documented here.
 - Deterministic fake payment provider with fault injection for pre-commit failure and commit followed by lost acknowledgement.
 - `agent-effect` testkit command and `agent-effect-ops` CLI for inspecting operations and recording evidence-backed manual resolutions.
 - Contract-version migration for existing SQLite ledgers, effect-specific documentation, and regression tests for concurrent claims and recovery.
+- Subprocess crash-recovery regression test proving a committed external effect is reconciled after the worker exits before persisting the local result.
 
 ### Security and reliability notes
 
