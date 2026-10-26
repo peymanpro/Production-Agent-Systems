@@ -54,6 +54,7 @@ The current core implementation includes:
 - **Conservative ambiguity handling** — quarantine uncertain writes by default when neither a reliable outcome probe nor a provider idempotency guarantee can make retry safe.
 - **Postcondition validation** — require a caller-defined condition before treating a returned or probed result as confirmed.
 - **Operation conflict detection** — detect request-fingerprint mismatches before another handler dispatch.
+- **Operator inspection and audited resolution** — list operations by status, record evidence-backed manual confirmation or rejection, and explicitly authorize a retry after trusted verification.
 - **Fault-injection demo** — reproduce failure before commit and commit followed by a lost acknowledgement, then report the number of committed fake effects.
 - **No model-provider dependency** — the core tests and demo run without API keys or hosted model calls.
 
@@ -198,7 +199,7 @@ A handler can raise **EffectRejected** only when it has reliable evidence that t
 - **Conflicting operation ID:** raise OperationConflictError before another external dispatch.
 - **Result that cannot be stored as JSON:** preserve an unknown outcome rather than claiming a durable replay result that was not stored.
 
-The ledger's transitions are inspectable through **SQLiteEffectLedger.events(operation_id)**. See [Effect Contracts and Recovery](docs/effect-contracts.md) for state semantics and runtime configuration.
+Operations can be inspected with **SQLiteEffectLedger.list_operations(status=EffectStatus.QUARANTINED)**; transitions are available through **SQLiteEffectLedger.events(operation_id)**. For a quarantined operation, **EffectExecutor** also exposes auditable manual confirmation, rejection, and retry authorization methods. Those methods record an actor, reason, and evidence reference but do not authenticate the actor; the integrating application must enforce operator authorization. See [Effect Contracts and Recovery](docs/effect-contracts.md).
 
 ## Fault-injection testkit
 
@@ -299,7 +300,7 @@ The current branch implements the standalone effect contract, SQLite ledger, eff
 2. Add and validate a PostgreSQL ledger before claiming cross-host coordination.
 3. Build framework adapters only after the contract and recovery state machine are stable.
 4. Expand the fault matrix and compare results against a baseline using the same independently counted committed-effect ledger.
-5. Add operator-facing inspection and resolution APIs for quarantined operations, with an explicit evidence trail.
+5. Add an operator-facing CLI for inspecting and resolving quarantined operations; the current resolution methods are available as a Python API.
 
 These items are not claimed as completed until implementation, tests, and documentation all agree.
 
