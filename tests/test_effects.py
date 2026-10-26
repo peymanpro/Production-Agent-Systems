@@ -896,3 +896,23 @@ def test_authoritative_probe_confirmation_wins_race_with_new_dispatch_claim(tmp_
     assert record is not None
     assert record.status is EffectStatus.CONFIRMED
     assert record.output == {"payment_id": "pay-race", "status": "captured"}
+
+def test_guaranteed_provider_idempotency_rejects_missing_runtime_key(tmp_path):
+    contract = EffectContract(
+        name="capture_payment",
+        operation_id=lambda args: f"invoice:{args['invoice_id']}:capture",
+        provider_idempotency_key=lambda args: None,
+        provider_idempotency_guaranteed=True,
+    )
+    calls: list[int] = []
+
+    with pytest.raises(ValueError, match="produced no key"):
+        EffectExecutor(
+            ledger=SQLiteEffectLedger(tmp_path / "effects.sqlite3")
+        ).execute(
+            contract=contract,
+            arguments={"invoice_id": "INV-NO-KEY"},
+            handler=lambda arguments, *, idempotency_key: calls.append(1),
+        )
+
+    assert calls == []
