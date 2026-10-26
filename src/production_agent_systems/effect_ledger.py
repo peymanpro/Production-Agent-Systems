@@ -323,6 +323,7 @@ class SQLiteEffectLedger:
                 return True
             if owner_token is None:
                 if row["status"] not in {
+                    EffectStatus.PREPARED.value,
                     EffectStatus.OUTCOME_UNKNOWN.value,
                     EffectStatus.QUARANTINED.value,
                 }:
