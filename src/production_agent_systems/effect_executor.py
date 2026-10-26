@@ -22,6 +22,10 @@ from .effect_models import (
 )
 
 
+class _HandlerDeadlineExceeded(TimeoutError):
+    """A local wait timed out; the underlying handler thread may still be running."""
+
+
 class EffectExecutor:
     """Execute a contracted external effect and preserve uncertainty on failure."""
 
@@ -88,6 +92,10 @@ class EffectExecutor:
                     operation_id,
                     "dispatch lease expired; external outcome must be reconciled",
                     owner_token=record.owner_token,
+                    evidence={
+                        "handler_may_still_be_running": True,
+                        "dispatch_interruption": "lease_expired",
+                    },
                 )
                 record = self.ledger.get(operation_id)
                 assert record is not None
@@ -149,11 +157,35 @@ class EffectExecutor:
                 current = self.ledger.get(operation_id)
                 assert current is not None
                 return self._result(current)
+            except _HandlerDeadlineExceeded as exc:
+                self.ledger.mark_outcome_unknown(
+                    operation_id,
+                    f"{type(exc).__name__}: handler wait timed out; the handler may still be running",
+                    owner_token=owner_token,
+                    evidence={
+                        "handler_may_still_be_running": True,
+                        "dispatch_interruption": "handler_timeout",
+                    },
+                )
+                reconciled = self._reconcile(
+                    contract=contract,
+                    arguments=json.loads(canonical),
+                    operation_id=operation_id,
+                    allow_idempotent_retry=True,
+                )
+                if reconciled is not None:
+                    return reconciled
+                if dispatch_round == 0:
+                    continue
+                current = self.ledger.get(operation_id)
+                assert current is not None
+                return self._result(current)
             except Exception as exc:
                 self.ledger.mark_outcome_unknown(
                     operation_id,
                     f"{type(exc).__name__}: handler raised after dispatch; outcome may be unknown",
                     owner_token=owner_token,
+                    evidence={"dispatch_interruption": "handler_exception"},
                 )
                 reconciled = self._reconcile(
                     contract=contract,
@@ -251,7 +283,7 @@ class EffectExecutor:
             # Cancelling a running Python thread cannot stop a remote side effect.
             # Preserve uncertainty; the provider contract must settle the outcome.
             future.cancel()
-            raise TimeoutError(
+            raise _HandlerDeadlineExceeded(
                 "effect handler timed out; external work may still be running"
             ) from exc
         finally:
@@ -283,6 +315,10 @@ class EffectExecutor:
                 operation_id,
                 "dispatch lease expired during reconciliation; outcome must be rechecked",
                 owner_token=record.owner_token,
+                evidence={
+                    "handler_may_still_be_running": True,
+                    "dispatch_interruption": "lease_expired",
+                },
             )
             record = self.ledger.get(operation_id)
             assert record is not None
@@ -378,8 +414,43 @@ class EffectExecutor:
                 )
 
             if probe.status is ProbeStatus.NOT_COMMITTED:
-                # This status is a contract assertion: the provider has established
-                # that the prior request is terminal and can no longer commit later.
+                # Even a terminal provider lookup cannot prove that a timed-out local
+                # handler will not submit its request later. Only a provider idempotency
+                # guarantee makes that overlapping retry safe.
+                if (
+                    record.evidence.get("handler_may_still_be_running") is True
+                    and not (
+                        allow_idempotent_retry
+                        and contract.provider_idempotency_guaranteed
+                    )
+                ):
+                    message = (
+                        "provider reports no committed effect, but a previous handler "
+                        "may still dispatch; automatic retry is blocked"
+                    )
+                    if contract.unknown_outcome is UnknownOutcomePolicy.QUARANTINE:
+                        self.ledger.mark_quarantined(
+                            operation_id,
+                            message,
+                            evidence={
+                                **evidence,
+                                "handler_may_still_be_running": True,
+                            },
+                        )
+                    else:
+                        self.ledger.mark_outcome_unknown(
+                            operation_id,
+                            message,
+                            evidence={
+                                **evidence,
+                                "handler_may_still_be_running": True,
+                            },
+                        )
+                    current = self.ledger.get(operation_id)
+                    assert current is not None
+                    return self._result(current)
+                # Here either the previous handler is known to have exited, or the
+                # provider's idempotency guarantee makes an overlapping dispatch safe.
                 self.ledger.reset_for_retry(operation_id, evidence=evidence)
                 return None
 
@@ -483,6 +554,9 @@ class EffectExecutor:
         """Authorize retry only after a trusted operator establishes terminal non-execution."""
         evidence = self._validate_manual_resolution(actor, reason, evidence_reference)
         evidence["resolution"] = "manual_retry_authorization"
+        # The trusted operator is asserting that no earlier handler can still dispatch
+        # and the previous request is terminally known not to have taken effect.
+        evidence["handler_may_still_be_running"] = False
         if not self.ledger.authorize_manual_retry(operation_id, evidence=evidence):
             raise EffectError(
                 "manual retry is allowed only for an existing unknown or quarantined operation"
