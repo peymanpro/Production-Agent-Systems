@@ -184,7 +184,7 @@ A probe should return:
 - **PENDING** when the provider says the operation is still processing or the result is not final.
 - **UNKNOWN** when available evidence cannot settle the outcome.
 
-An empty lookup is not necessarily proof of non-execution. A provider may process a request asynchronously or expose an eventually consistent read path. When the provider cannot establish the outcome, the default behavior is to preserve uncertainty rather than to dispatch the mutation again.
+An empty lookup is not necessarily proof of non-execution. A provider may process a request asynchronously or expose an eventually consistent read path. If the probe cannot establish the outcome, the executor preserves uncertainty by default. It may dispatch a retry with the same provider key only when the caller explicitly asserts the provider's documented idempotency guarantee; that assertion must be grounded in the provider's actual contract, not merely in the presence of a key parameter.
 
 ### Definitive rejections
 
