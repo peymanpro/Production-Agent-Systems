@@ -804,3 +804,72 @@ def test_committed_effect_that_fails_postcondition_is_quarantined(tmp_path):
         event["event_type"] == "quarantined"
         for event in ledger.events(result.operation_id)
     )
+
+def test_timeout_with_negative_probe_does_not_retry_while_old_handler_may_dispatch(tmp_path):
+    from threading import Event
+    from time import monotonic, sleep
+
+    handler_entered = Event()
+    release_handler = Event()
+    committed_effects: list[dict[str, str]] = []
+    handler_calls: list[int] = []
+
+    def handler(arguments, *, idempotency_key):
+        handler_calls.append(1)
+        handler_entered.set()
+        assert release_handler.wait(timeout=3)
+        result = {"resource_id": arguments["resource_id"], "created": True}
+        committed_effects.append(result)
+        return result
+
+    def probe(arguments, *, idempotency_key):
+        if committed_effects:
+            return OutcomeProbeResult(
+                status=ProbeStatus.COMMITTED,
+                output=committed_effects[0],
+                evidence={"source": "fake provider"},
+            )
+        # The provider has not seen a request yet, but the local timed-out
+        # handler still has the ability to submit one later.
+        return OutcomeProbeResult(
+            status=ProbeStatus.NOT_COMMITTED,
+            evidence={"source": "fake provider", "query_is_terminal": True},
+        )
+
+    contract = EffectContract(
+        name="create_resource",
+        operation_id=lambda args: f"resource:{args['resource_id']}:create",
+        outcome_probe=probe,
+    )
+    ledger = SQLiteEffectLedger(tmp_path / "effects.sqlite3")
+    executor = EffectExecutor(ledger=ledger)
+
+    first = executor.execute(
+        contract=contract,
+        arguments={"resource_id": "R-TIMEOUT-NEGATIVE-PROBE"},
+        handler=handler,
+        handler_timeout_seconds=0.01,
+    )
+
+    assert handler_entered.is_set()
+    assert first.status is EffectStatus.QUARANTINED
+    assert len(handler_calls) == 1
+    assert len(committed_effects) == 0
+
+    release_handler.set()
+    deadline = monotonic() + 2
+    while not committed_effects and monotonic() < deadline:
+        sleep(0.01)
+    assert len(committed_effects) == 1
+
+    recovered = executor.execute(
+        contract=contract,
+        arguments={"resource_id": "R-TIMEOUT-NEGATIVE-PROBE"},
+        handler=handler,
+        handler_timeout_seconds=0.01,
+    )
+
+    assert recovered.status is EffectStatus.CONFIRMED
+    assert len(handler_calls) == 1
+    assert len(committed_effects) == 1
+    assert ledger.get(first.operation_id).evidence["handler_may_still_be_running"] is True
