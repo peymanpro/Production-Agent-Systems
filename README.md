@@ -24,6 +24,8 @@ The library focuses on the boundary between **what an agent believes happened** 
 - [Research behind the design](#research-behind-the-design)
 - [Development](#development)
 - [Current scope and next steps](#current-scope-and-next-steps)
+- [Changelog](CHANGELOG.md)
+- [Security policy](SECURITY.md)
 - [License](#license)
 
 ## Why this library exists
@@ -326,7 +328,7 @@ The current branch implements the standalone effect contract, SQLite ledger, eff
 4. Expand the fault matrix and compare results against a baseline using the same independently counted committed-effect ledger.
 5. Add an operator-facing CLI for inspecting and resolving quarantined operations; the current resolution methods are available as a Python API.
 
-These items are not claimed as completed until implementation, tests, and documentation all agree.
+These items are not claimed as completed until implementation, tests, and documentation all agree. See [CHANGELOG.md](CHANGELOG.md) for the current development scope and [SECURITY.md](SECURITY.md) for vulnerability disclosure and security boundaries.
 
 ## License
 
