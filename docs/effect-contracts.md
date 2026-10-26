@@ -123,6 +123,20 @@ If the operator instead establishes that the previous request is terminal and de
 
 These APIs record an audit trail; they do not authenticate the operator or validate the contents of an evidence reference. The integrating application must authenticate and authorize the operator, verify evidence independently, and ensure a retry cannot race with an earlier request that is still capable of committing.
 
+The `agent-effect-ops` command exposes the same operations for a local SQLite ledger:
+
+~~~bash
+agent-effect-ops --db agent-effects.sqlite3 list --status quarantined
+agent-effect-ops --db agent-effects.sqlite3 events "invoice:INV-1042:capture:v1"
+agent-effect-ops --db agent-effects.sqlite3 confirm "invoice:INV-1042:capture:v1" \
+  --output-json '{"payment_id":"pay-123","status":"captured"}' \
+  --actor on-call-operator \
+  --reason "Verified provider capture record" \
+  --evidence-reference INC-1042/provider-event-123
+~~~
+
+The list command omits request payloads and stored outputs by default. The events command may contain operational evidence; restrict access to the ledger and terminal output accordingly. The CLI is intended for trusted local operations, not as a remotely exposed administration API.
+
 ## Guarantees and boundaries
 
 The library can atomically coordinate operation records in its SQLite ledger and prevent concurrent claims while a dispatch lease is active. It cannot atomically commit a remote payment and a local SQLite row. In particular, universal exactly-once external effects cannot be promised without a cooperating destination or authoritative evidence that lets the executor safely resolve an uncertain attempt.
