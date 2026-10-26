@@ -66,12 +66,12 @@ class EffectContract:
 
     name: str
     operation_id: Callable[[Mapping[str, Any]], str]
-    version: str = "1"
     provider_idempotency_key: Callable[[Mapping[str, Any]], str] | None = None
     provider_idempotency_guaranteed: bool = False
     outcome_probe: Callable[..., OutcomeProbeResult] | None = None
     postcondition: Callable[[Mapping[str, Any], Any], bool] | None = None
     unknown_outcome: UnknownOutcomePolicy = UnknownOutcomePolicy.QUARANTINE
+    version: str = "1"
 
     def __post_init__(self) -> None:
         if not self.name.strip():
