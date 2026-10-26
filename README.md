@@ -44,6 +44,8 @@ The same failure pattern appears in email delivery, ticket creation, resource pr
 
 Production Agent Systems records an operation before dispatch, uses a stable business identity, tracks whether the result is confirmed or uncertain, and only retries an uncertain write when the provider contract supplies a safe basis for doing so. It never treats a timeout or an LLM's final answer as proof of external success.
 
+A local handler deadline is not cancellation: the Python worker thread can continue and send a request after the caller has timed out. In that case, even a provider lookup that currently reports no commit cannot, by itself, prove that retry is safe. The ledger records this possibility and blocks retry unless the provider's stable-key idempotency guarantee makes overlapping dispatch safe or a trusted operator establishes that the previous handler can no longer send the request.
+
 ## Current capabilities
 
 The current core implementation includes:
