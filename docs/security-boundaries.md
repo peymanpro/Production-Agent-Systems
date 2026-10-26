@@ -1,6 +1,6 @@
-# Security Boundaries — V1
+# Security Boundaries
 
-This document records the runtime's implemented safeguards and their limits. The core package is a runtime library, not a complete authenticated production service.
+This document records the implemented safeguards and their limits. The package is a runtime library, not a complete authenticated production service. Effect ledger events are persisted in SQLite, but that ledger is not a tamper-evident audit archive and the local operator CLI does not authenticate its caller.
 
 ## Tool input validation
 
@@ -27,16 +27,23 @@ runtime.run(task, confirmed_mutations=frozenset({"suspend_customer"}))
 
 The runtime cannot itself determine whether a human genuinely approved an action. The application or orchestration layer that calls **run** must collect approval through a trusted channel, authenticate the approver when required, and pass only the exact tools that were approved. A caller that blindly trusts user-controlled input can still misuse this API.
 
+## Effect ledger and operator resolution
+
+- The effect ledger durably stores operation status and event history in a file-backed SQLite database. Database-file access therefore grants access to operational metadata and may grant the ability to alter local state; protect it with filesystem permissions and backups.
+- The local `agent-effect-ops` CLI records an actor identifier, reason, and evidence reference for manual resolution. Those strings are audit context, not proof of identity or proof that the evidence is valid. Put the CLI behind a trusted operator environment and authenticate/authorize the person before invoking it.
+- Manual retry authorization is an assertion that the prior operation is terminal and cannot still commit. Do not authorize retry merely because a timeout occurred or a lookup temporarily returned no result.
+- Effect ledger events are ordered but not cryptographically chained or externally anchored. They must not be represented as tamper-evident compliance evidence.
+
 ## Remaining limitations
 
 - The runtime is provider-neutral; it does not implement a complete defense against prompt injection inside an LLM.
 - Allowlisting and confirmation are tool-level controls, not resource-level authorization. A handler must still validate that the caller may modify the specific customer, file, account, or other resource named in its arguments.
-- The runtime does not provide HTTP authentication, tenant isolation, secret management, durable audit storage, or OS/container sandboxing.
+- The package does not provide HTTP authentication, tenant isolation, secret management, an authenticated remote administration API, or OS/container sandboxing. Generic runtime state, trace, and audit sinks remain in-memory reference implementations.
 - Tool handlers should use least privilege, avoid exposing secrets to model context, and treat every model-generated argument as untrusted.
 - A timeout of a Python worker thread does not forcibly terminate an already-running handler; external side effects need idempotency and downstream timeouts.
 
-## Security regression coverage
+## Security and recovery regression coverage
 
-**tests/test_tool_validation.py** checks strict input validation and confirms invalid arguments do not reach a handler. **tests/test_runtime.py** checks that task metadata cannot approve a mutation and that explicit caller-supplied approval still works.
+**tests/test_tool_validation.py** checks strict input validation and confirms invalid arguments do not reach a handler. **tests/test_runtime.py** checks that task metadata cannot approve a mutation and that explicit caller-supplied approval still works. **tests/test_effects.py** checks operation-ID conflict detection, unknown-outcome handling, safe provider-key replay, timeouts, and evidence-backed manual resolution. **tests/test_effect_cli.py** checks that the local operations CLI emits summaries without request payloads and records manual-resolution events.
 
 These tests establish the tested library behavior; they do not prove the security of every surrounding application or tool handler.
