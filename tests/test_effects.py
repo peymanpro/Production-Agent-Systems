@@ -876,3 +876,23 @@ def test_timeout_with_negative_probe_does_not_retry_while_old_handler_may_dispat
     assert recovered.status is EffectStatus.CONFIRMED
     assert len(handler_calls) == 1
     assert len(committed_effects) == 1
+
+def test_authoritative_probe_confirmation_wins_race_with_new_dispatch_claim(tmp_path):
+    ledger = SQLiteEffectLedger(tmp_path / "effects.sqlite3")
+    operation_id = "invoice:INV-RACE:capture"
+    ledger.prepare(operation_id, "capture_payment", "1", "fingerprint", None)
+
+    # A reconciler that previously observed a committed provider operation can
+    # finish after another worker changed UNKNOWN back to PREPARED. Confirmation
+    # must win atomically before that worker claims another dispatch.
+    assert ledger.mark_confirmed(
+        operation_id,
+        {"payment_id": "pay-race", "status": "captured"},
+        evidence={"source": "authoritative_provider_probe"},
+    )
+    assert not ledger.claim_dispatch(operation_id, "late-worker", lease_seconds=30)
+
+    record = ledger.get(operation_id)
+    assert record is not None
+    assert record.status is EffectStatus.CONFIRMED
+    assert record.output == {"payment_id": "pay-race", "status": "captured"}
