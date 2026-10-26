@@ -65,6 +65,10 @@ class EffectExecutor:
             not isinstance(provider_key, str) or not provider_key.strip()
         ):
             raise ValueError("provider idempotency key must be a non-empty string or None")
+        if contract.provider_idempotency_guaranteed and provider_key is None:
+            raise ValueError(
+                "contract declared provider idempotency guaranteed but produced no key"
+            )
 
         fingerprint = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
         self.ledger.prepare(
