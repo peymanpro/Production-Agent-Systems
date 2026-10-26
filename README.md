@@ -265,7 +265,7 @@ SQLiteEffectLedger stores operation records and their event history in a file-ba
 
 SQLite is intended for local and single-host workflows. A durable SQLite database does not make an external provider transactional, and it is not a substitute for a shared coordination backend in a multi-host deployment. A PostgreSQL ledger and its cross-host concurrency contract are not included in the current implementation.
 
-Lease expiry also does not prove that a slow handler or remote request stopped. The effect executor can bound how long it waits for a handler, but a running Python thread cannot be forcibly terminated. Provider-native network timeouts are still required. After an uncertain timeout or lease expiry, the executor must reconcile the provider outcome; it must not infer that retry is safe from a timeout alone.
+Lease expiry also does not prove that a slow handler or remote request stopped. The effect executor can bound how long it waits for a handler, but a running Python thread cannot be forcibly terminated. Provider-native network timeouts are still required. After a handler timeout or lease expiry, a negative provider probe alone does not authorize retry while the old handler may still dispatch; use provider idempotency or an evidence-backed operator resolution.
 
 ## Security model and limits
 
