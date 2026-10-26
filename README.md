@@ -244,7 +244,7 @@ agent-effect-ops --db agent-effects.sqlite3 authorize-retry invoice:INV-1042:cap
   --evidence-reference INC-1042/provider-terminal-query
 ~~~
 
-The JSON report includes the scenario, operation ID, final status, attempt count, committed-effect count, duplicate detection, and event types. The built-in fake provider is deterministic and does not call a real payment service.
+The JSON report includes the scenario, operation ID, final status, attempt count, committed-effect count, duplicate detection, and event types. The built-in fake provider is deterministic and does not call a real payment service. For a complete example using `AgentRuntime`, a contracted `ToolDefinition`, the SQLite ledger, and lost-ack reconciliation, run `python examples/effect_assurance_demo.py`. The example exits with an error if the runtime does not complete with exactly one committed fake payment.
 
 The test suite covers:
 
