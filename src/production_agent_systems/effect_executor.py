@@ -15,7 +15,6 @@ from .effect_models import (
     EffectRejected,
     EffectResult,
     EffectStatus,
-    OperationConflictError,
     OutcomeProbeResult,
     ProbeStatus,
     UnknownOutcomePolicy,
