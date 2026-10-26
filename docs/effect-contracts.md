@@ -37,7 +37,7 @@ An outcome probe returns an `OutcomeProbeResult` with one of four states:
 - `PENDING`: the operation is still in progress; do not dispatch another write.
 - `UNKNOWN`: current evidence cannot prove either success or non-execution.
 
-A missing record, a temporary 404, or an eventually consistent read is not automatically a terminal `NOT_COMMITTED` result.
+A missing record, a temporary 404, or an eventually consistent read is not automatically a terminal `NOT_COMMITTED` result. Even a terminal negative provider lookup is insufficient to authorize an overlapping retry if a timed-out local handler may still submit the request later. The ledger persists `handler_may_still_be_running` after a local timeout or expired dispatch lease. The executor then blocks retry on a negative probe unless the provider's documented idempotency guarantee makes same-key overlapping requests safe. A trusted operator may authorize retry only after establishing that the earlier handler can no longer dispatch and the provider operation is terminally known not to have taken effect.
 
 ## Postconditions and rejections
 
