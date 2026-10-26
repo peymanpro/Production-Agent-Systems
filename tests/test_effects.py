@@ -721,3 +721,45 @@ def test_operation_id_callback_cannot_mutate_arguments_for_provider_key(tmp_path
     assert result.status is EffectStatus.CONFIRMED
     assert seen_provider_inputs == ["INV-IMMUTABLE"]
     assert result.output["invoice_id"] == "INV-IMMUTABLE"
+
+def test_stale_probe_cannot_overwrite_a_new_active_dispatch(tmp_path):
+    ledger = SQLiteEffectLedger(tmp_path / "effects.sqlite3")
+    operation_id = "resource:R-LEASE:create:v1"
+    ledger.prepare(
+        operation_id,
+        "create_resource",
+        "1",
+        "fingerprint",
+        None,
+    )
+    owner_token = "current-worker-token"
+    assert ledger.claim_dispatch(operation_id, owner_token, lease_seconds=30)
+
+    # These calls model a stale reconciler finishing after another worker has
+    # acquired the dispatch lease. Only the current owner may finalize it.
+    assert not ledger.mark_outcome_unknown(
+        operation_id,
+        "stale timeout observation",
+    )
+    assert not ledger.mark_confirmed(
+        operation_id,
+        {"created": True},
+    )
+    assert not ledger.mark_quarantined(
+        operation_id,
+        "stale probe said unknown",
+    )
+
+    active = ledger.get(operation_id)
+    assert active is not None
+    assert active.status is EffectStatus.DISPATCHED
+    assert active.owner_token == owner_token
+
+    assert ledger.mark_confirmed(
+        operation_id,
+        {"created": True},
+        owner_token=owner_token,
+    )
+    confirmed = ledger.get(operation_id)
+    assert confirmed is not None
+    assert confirmed.status is EffectStatus.CONFIRMED
