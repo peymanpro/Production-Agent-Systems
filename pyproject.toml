@@ -5,12 +5,15 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "production-agent-systems"
 version = "1.0.0"
-description = "Production-oriented, provider-neutral agent runtime foundations."
+description = "Provider-neutral effect assurance and reliability testing for agent tool operations."
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
 authors = [{ name = "Peyman Salimi" }]
 dependencies = []
+
+[project.scripts]
+agent-effect = "production_agent_systems.testkit:main"
 
 [project.optional-dependencies]
 dev = [
