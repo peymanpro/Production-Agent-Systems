@@ -401,3 +401,108 @@ def test_handler_timeout_preserves_uncertainty_until_late_effect_is_observed(tmp
     )
     assert recovered.status is EffectStatus.CONFIRMED
     assert len(committed) == 1
+
+def test_manual_confirmation_is_audited_and_prevents_reexecution(tmp_path):
+    provider = FaultInjectingPaymentProvider(
+        fault_point=FaultPoint.AFTER_COMMIT_BEFORE_ACK
+    )
+    contract = EffectContract(
+        name="capture_payment",
+        operation_id=lambda args: f"invoice:{args['invoice_id']}:capture:v1",
+    )
+    ledger = SQLiteEffectLedger(tmp_path / "effects.sqlite3")
+    executor = EffectExecutor(ledger=ledger)
+    arguments = {"invoice_id": "INV-MANUAL-1"}
+
+    first = executor.execute(
+        contract=contract,
+        arguments=arguments,
+        handler=provider.capture,
+    )
+    assert first.status is EffectStatus.QUARANTINED
+    assert len(provider.committed_effects) == 1
+    quarantined = ledger.list_operations(status=EffectStatus.QUARANTINED)
+    assert len(quarantined) == 1
+
+    resolved = executor.resolve_manually_confirmed(
+        first.operation_id,
+        provider.committed_effects[0],
+        actor="on-call-operator",
+        reason="Verified the capture in the provider dashboard",
+        evidence_reference="INC-1042/provider-event-1",
+        provider_operation_id="pay-000001",
+    )
+    replay = executor.execute(
+        contract=contract,
+        arguments=arguments,
+        handler=provider.capture,
+    )
+
+    assert resolved.status is EffectStatus.CONFIRMED
+    assert replay.status is EffectStatus.CONFIRMED
+    assert replay.duplicate_suppressed is True
+    assert len(provider.committed_effects) == 1
+    assert any(
+        event["event_type"] == "manually_confirmed"
+        for event in ledger.events(first.operation_id)
+    )
+
+
+def test_manual_retry_requires_explicit_evidence_and_only_retries_uncertain_records(tmp_path):
+    calls = 0
+
+    def handler(arguments, *, idempotency_key):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise TimeoutError("injected failure before commit")
+        return {"message_id": arguments["message_id"], "sent": True}
+
+    contract = EffectContract(
+        name="send_email",
+        operation_id=lambda args: f"email:{args['message_id']}:send:v1",
+    )
+    ledger = SQLiteEffectLedger(tmp_path / "effects.sqlite3")
+    executor = EffectExecutor(ledger=ledger)
+    arguments = {"message_id": "MSG-MANUAL-1"}
+    first = executor.execute(contract=contract, arguments=arguments, handler=handler)
+
+    assert first.status is EffectStatus.QUARANTINED
+    prepared = executor.authorize_manual_retry(
+        first.operation_id,
+        actor="on-call-operator",
+        reason="Provider confirms the prior request is terminal and was not accepted",
+        evidence_reference="INC-2048/provider-query-2",
+    )
+    assert prepared.status is EffectStatus.PREPARED
+
+    second = executor.execute(contract=contract, arguments=arguments, handler=handler)
+    assert second.status is EffectStatus.CONFIRMED
+    assert calls == 2
+    assert any(
+        event["event_type"] == "manual_retry_authorized"
+        for event in ledger.events(first.operation_id)
+    )
+
+
+def test_manual_resolution_requires_a_recorded_actor_reason_and_evidence(tmp_path):
+    contract = EffectContract(
+        name="mutate",
+        operation_id=lambda args: f"resource:{args['id']}:update:v1",
+    )
+    executor = EffectExecutor(
+        ledger=SQLiteEffectLedger(tmp_path / "effects.sqlite3")
+    )
+    result = executor.execute(
+        contract=contract,
+        arguments={"id": "42"},
+        handler=lambda arguments, *, idempotency_key: (_ for _ in ()).throw(TimeoutError()),
+    )
+
+    with pytest.raises(ValueError):
+        executor.authorize_manual_retry(
+            result.operation_id,
+            actor="",
+            reason="Checked",
+            evidence_reference="INC-1",
+        )
