@@ -291,7 +291,7 @@ def test_agent_runtime_waits_on_uncertain_effect_then_resumes_after_reconciliati
         name="capture_payment",
         operation_id=lambda args: f"invoice:{args['invoice_id']}:capture:v1",
         provider_idempotency_key=lambda args: f"capture:{args['invoice_id']}",
-        provider_idempotency_guaranteed=True,
+        provider_idempotency_guaranteed=False,
         outcome_probe=delayed_probe,
     )
     tool = ToolDefinition(
@@ -647,10 +647,12 @@ def test_sqlite_ledger_migrates_legacy_rows_to_contract_version_one(tmp_path):
     assert record is not None
     assert record.contract_name == "legacy-contract"
     assert record.contract_version == "1"
-    columns = {
-        row["name"]
-        for row in sqlite3.connect(database).execute("PRAGMA table_info(effect_operations)")
-    }
+    with sqlite3.connect(database) as migrated_connection:
+        migrated_connection.row_factory = sqlite3.Row
+        columns = {
+            row["name"]
+            for row in migrated_connection.execute("PRAGMA table_info(effect_operations)")
+        }
     assert "contract_version" in columns
 
 def test_handler_mutation_does_not_change_reconciliation_arguments(tmp_path):
