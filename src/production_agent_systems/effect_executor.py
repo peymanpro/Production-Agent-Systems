@@ -353,7 +353,7 @@ class EffectExecutor:
                         operation_id,
                         evidence={
                             "retry_basis": "provider idempotency contract after probe failure",
-                            "provider_idempotency_key": record.provider_idempotency_key,
+                            "provider_idempotency_key_present": record.provider_idempotency_key is not None,
                         },
                     )
                     return None
@@ -470,7 +470,7 @@ class EffectExecutor:
                     evidence={
                         **evidence,
                         "retry_basis": "provider idempotency contract",
-                        "provider_idempotency_key": record.provider_idempotency_key,
+                        "provider_idempotency_key_present": record.provider_idempotency_key is not None,
                     },
                 )
                 return None
@@ -487,7 +487,7 @@ class EffectExecutor:
                 operation_id,
                 evidence={
                     "retry_basis": "provider idempotency contract",
-                    "provider_idempotency_key": record.provider_idempotency_key,
+                    "provider_idempotency_key_present": record.provider_idempotency_key is not None,
                 },
             )
             return None
