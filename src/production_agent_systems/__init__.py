@@ -2,6 +2,21 @@
 
 from .audit import AuditRecord, AuditSink, InMemoryAuditSink
 from .events import Event, EventSink, EventType, InMemoryEventSink
+from .effects import (
+    EffectContract,
+    EffectError,
+    EffectExecutor,
+    EffectLedger,
+    EffectRecord,
+    EffectRejected,
+    EffectResult,
+    EffectStatus,
+    OperationConflictError,
+    OutcomeProbeResult,
+    ProbeStatus,
+    SQLiteEffectLedger,
+    UnknownOutcomePolicy,
+)
 from .model import ModelCompletion, ModelProvider
 from .models import (
     ActionKind,
@@ -37,13 +52,24 @@ __all__ = [
     "Event",
     "EventSink",
     "EventType",
+    "EffectContract",
+    "EffectError",
+    "EffectExecutor",
+    "EffectLedger",
+    "EffectRecord",
+    "EffectRejected",
+    "EffectResult",
+    "EffectStatus",
     "InMemoryAuditSink",
     "InMemoryEventSink",
     "InMemoryStateStore",
     "ModelCompletion",
     "ModelProvider",
     "Observation",
+    "OperationConflictError",
+    "OutcomeProbeResult",
     "PermissionPolicy",
+    "ProbeStatus",
     "Planner",
     "PolicyDecision",
     "ReplayEngine",
@@ -51,6 +77,7 @@ __all__ = [
     "RetryPolicy",
     "RunStatus",
     "RuntimeConfig",
+    "SQLiteEffectLedger",
     "StateStore",
     "Task",
     "ToolDefinition",
@@ -58,5 +85,6 @@ __all__ = [
     "ToolExecutor",
     "ToolRegistry",
     "ToolResult",
+    "UnknownOutcomePolicy",
     "__version__",
 ]
