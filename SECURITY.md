@@ -15,7 +15,7 @@ Include the affected commit or release, the required preconditions, a minimal re
 - The library does not authenticate operators who use `agent-effect-ops`. The surrounding environment must restrict who can read or mutate the SQLite ledger and who can invoke manual resolution commands.
 - Actor names and evidence references in manual-resolution records are audit context, not independent proof of identity or evidence validity.
 - Provider idempotency guarantees and `NOT_COMMITTED` probe results are assertions made by the integration. They must match the external provider's documented semantics.
-- A Python thread timeout does not terminate an already-running handler or remote request.
+- A Python thread timeout does not terminate an already-running handler or remote request. The library therefore blocks a retry after timeout when the old handler may still dispatch, unless a documented provider idempotency guarantee makes the overlapping call safe.
 - SQLite effect events are ordered, but are not cryptographically chained or externally anchored.
 - The application remains responsible for caller authentication, resource-level authorization, credential protection, least-privilege access, and real human approval.
 
