@@ -12,7 +12,6 @@ from production_agent_systems import (
     DeterministicPlanner,
     EffectContract,
     EffectExecutor,
-    EventSink,
     InMemoryEventSink,
     InMemoryStateStore,
     PermissionPolicy,
